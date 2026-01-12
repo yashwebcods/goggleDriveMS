@@ -1,21 +1,52 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { userService } from '../services/user.services';
 
 const ChangePassword = () => {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [email, setEmail] = useState('');
 
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const handleSubmit = (e: any) => {
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const emailFromQuery = params.get('email') || '';
+    if (!emailFromQuery) {
+      navigate('/forgot-password', { replace: true });
+      return;
+    }
+    setEmail(emailFromQuery);
+  }, [location.search, navigate]);
+
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
     setIsLoading(true);
+    setError('');
+    setSuccess('');
 
-    setTimeout(() => {
+    try {
+      const result = await userService.resetPassword(email, password, confirm);
+      if (!result?.success) {
+        setError(result?.message || `Password update failed (HTTP ${result?.status ?? 'unknown'})`);
+        setIsLoading(false);
+        return;
+      }
+
+      setSuccess(result?.message || 'Password changed successfully');
       setIsLoading(false);
-      navigate('/login');
-    }, 900);
+
+      setTimeout(() => {
+        navigate(`/login?email=${encodeURIComponent(email)}`);
+      }, 900);
+    } catch (err: any) {
+      setError(err?.message || 'Something went wrong');
+      setIsLoading(false);
+    }
   };
 
   const backgroundSvg = encodeURIComponent(`
@@ -48,6 +79,16 @@ const ChangePassword = () => {
           <p className="text-gray-700/70 text-center mb-8 text-sm leading-relaxed">Set a new password for your account</p>
 
           <form onSubmit={handleSubmit}>
+            {error ? (
+              <div className="mb-4 rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
+                {error}
+              </div>
+            ) : null}
+            {success ? (
+              <div className="mb-4 rounded-lg bg-green-50 border border-green-200 text-green-700 px-4 py-3 text-sm">
+                {success}
+              </div>
+            ) : null}
             <div className="mb-4">
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">

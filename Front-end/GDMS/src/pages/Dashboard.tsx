@@ -2,7 +2,47 @@ import MainSection from '../components/dashboard/MainSection';
 import Sidebar from '../components/dashboard/Sidebar';
 import TopHeader from '../components/dashboard/TopHeader';
 import type { FileRow } from '../components/dashboard/types';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { userService } from '../services/user.services';
 const Dashboard = () => {
+  const [profile, setProfile] = useState<any>(null);
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const run = async () => {
+      const token = localStorage.getItem('token') || '';
+      if (!token) {
+        navigate('/login', { replace: true });
+        return;
+      }
+
+      setIsLoading(true);
+      setError('');
+
+      const result = await userService.profile(token);
+      if (!result?.success) {
+        if (result?.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          navigate('/login', { replace: true });
+          return;
+        }
+
+        setError(result?.message || `Failed to load profile (HTTP ${result?.status ?? 'unknown'})`);
+        setIsLoading(false);
+        return;
+      }
+
+      setProfile(result?.data);
+      setIsLoading(false);
+    };
+
+    run();
+  }, [navigate]);
+
   const quickAccess = [
     { title: 'My projects', accent: 'bg-blue-500' },
     { title: 'Moodboards', accent: 'bg-blue-500' },
@@ -28,7 +68,21 @@ const Dashboard = () => {
   ];
   return (
     <div className="h-screen bg-[#F6F8FB] text-gray-900 flex flex-col overflow-hidden">
-      <TopHeader />
+      <TopHeader
+        user={profile}
+        onLogout={() => {
+          navigate('/login', { replace: true });
+        }}
+      />
+
+      <div className="px-4 pt-3">
+        {isLoading ? <div className="text-sm text-gray-600">Loading profile...</div> : null}
+        {!isLoading && error ? (
+          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            {error}
+          </div>
+        ) : null}
+      </div>
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />

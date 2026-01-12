@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { userService } from '../services/user.services';
 
 const Signup = () => {
   const [name, setName] = useState('');
@@ -7,17 +8,41 @@ const Signup = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
 
   const navigate = useNavigate();
 
-  const handleSubmit = (e: any) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
     setIsLoading(true);
 
-    setTimeout(() => {
+    setError('');
+    try {
+      const result = await userService.register({
+        username: name.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+      });
+
+      if (!result?.success) {
+        setError(result?.message || `Registration failed (HTTP ${result?.status ?? 'unknown'})`);
+        setIsLoading(false);
+        return;
+      }
+
+      const token = result?.data?.token;
+      if (!token) {
+        setError('Registration failed: token missing in response');
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(false);
-      navigate('/login');
-    }, 900);
+      navigate(`/login?email=${encodeURIComponent(email.trim().toLowerCase())}`, { replace: true });
+    } catch (err: any) {
+      setError(err?.message || 'Something went wrong');
+      setIsLoading(false);
+    }
   };
 
   const togglePasswordVisibility = () => {
@@ -73,6 +98,11 @@ const Signup = () => {
           <p className="text-gray-700/70 text-center mb-8 text-sm leading-relaxed">Sign up to start using your dashboard and manage your progress</p>
 
           <form onSubmit={handleSubmit}>
+            {error ? (
+              <div className="mb-4 rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
+                {error}
+              </div>
+            ) : null}
             <div className="mb-4">
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -84,7 +114,7 @@ const Signup = () => {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="block w-full pl-10 pr-3 py-3.5 bg-transparent border-0 rounded-none text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-0"
-                  placeholder="Full name"
+                  placeholder="Username"
                   required
                 />
                 <div className="absolute bottom-0 left-0 right-0 h-px bg-black/50 group-focus-within:bg-black group-focus-within:h-0.5 transition-all duration-200" />

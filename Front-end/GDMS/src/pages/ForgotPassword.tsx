@@ -1,20 +1,39 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { userService } from '../services/user.services';
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const navigate = useNavigate();
 
-  const handleSubmit = (e: any) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
     setIsLoading(true);
+    setError('');
+    setSuccess('');
 
-    setTimeout(() => {
+    try {
+      const result = await userService.sendOtp(email);
+      if (!result?.success) {
+        setError(result?.message || `Failed to send OTP (HTTP ${result?.status ?? 'unknown'})`);
+        setIsLoading(false);
+        return;
+      }
+
+      setSuccess(result?.message || 'Email verified successfully. OTP sent to your email.');
       setIsLoading(false);
-      navigate('/otp');
-    }, 900);
+
+      setTimeout(() => {
+        navigate(`/otp?email=${encodeURIComponent(email)}`);
+      }, 800);
+    } catch (err: any) {
+      setError(err?.message || 'Something went wrong');
+      setIsLoading(false);
+    }
   };
 
   const backgroundSvg = encodeURIComponent(`
@@ -52,6 +71,16 @@ const ForgotPassword = () => {
           <p className="text-gray-700/70 text-center mb-8 text-sm leading-relaxed">Enter your email and we will send you a verification code</p>
 
           <form onSubmit={handleSubmit}>
+            {error ? (
+              <div className="mb-4 rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
+                {error}
+              </div>
+            ) : null}
+            {success ? (
+              <div className="mb-4 rounded-lg bg-green-50 border border-green-200 text-green-700 px-4 py-3 text-sm">
+                {success}
+              </div>
+            ) : null}
             <div className="mb-2">
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">

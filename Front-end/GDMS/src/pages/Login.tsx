@@ -1,22 +1,53 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import '../index.css';
+import { userService } from '../services/user.services';
 
 const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
 
-    const handleSubmit = (e: any) => {
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const emailFromQuery = params.get('email') || '';
+        if (emailFromQuery) setEmail(emailFromQuery);
+    }, [location.search]);
+
+    const handleSubmit = async (e: any) => {
         e.preventDefault();
         setIsLoading(true);
+        setError('');
 
-        // Simulate API call
-        setTimeout(() => {
+        try {
+            const result = await userService.login(email, password);
+            if (!result?.success) {
+                setError(result?.message || `Login failed (HTTP ${result?.status ?? 'unknown'})`);
+                setIsLoading(false);
+                return;
+            }
+
+            const token = result?.data?.token;
+            if (!token) {
+                setError('Login failed: token missing in response');
+                setIsLoading(false);
+                return;
+            }
+
+            localStorage.setItem('token', token);
+            localStorage.setItem('user', JSON.stringify(result?.data));
+
             setIsLoading(false);
-            alert(`Sign in attempt with:\nEmail: ${email}\nPassword: ${password}`);
-        }, 1500);
+            navigate('/dashboard', { replace: true });
+        } catch (err: any) {
+            setError(err?.message || 'Something went wrong');
+            setIsLoading(false);
+        }
     };
 
     // Password show/hide toggle function
@@ -84,6 +115,11 @@ const Login = () => {
                             <p className="text-gray-700/70 text-center mb-8 text-sm leading-relaxed">Make a new doc to bring your data, the latest progress for free</p>
 
                             <form onSubmit={handleSubmit}>
+                                {error ? (
+                                    <div className="mb-4 rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
+                                        {error}
+                                    </div>
+                                ) : null}
                                 {/* Email Input */}
                                 <div className="mb-4">
                                     <div className="relative group">
@@ -114,7 +150,7 @@ const Login = () => {
                                             </svg>
                                         </div>
                                         <input
-                                            type={showPassword ? "text" : "password"} // यहाँ type change होगा
+                                            type={showPassword ? "text" : "password"}
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
                                             className="block w-full pl-10 pr-11 py-3.5 bg-transparent border-0 rounded-none text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-0"
@@ -125,7 +161,7 @@ const Login = () => {
                                         {/* Password visibility toggle button */}
                                         <button
                                             type="button"
-                                            onClick={togglePasswordVisibility} // यहाँ function add किया
+                                            onClick={togglePasswordVisibility}
                                             className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
                                             aria-label={showPassword ? "Hide password" : "Show password"}
                                         >
@@ -169,9 +205,7 @@ const Login = () => {
                                         </>
                                     ) : (
                                         <>
-                                            <Link to="/dashboard">
-                                                Login Now
-                                            </Link>
+                                            Login Now
                                         </>
                                     )}
                                 </button>
@@ -193,10 +227,10 @@ const Login = () => {
                                     <div className="h-px flex-1 bg-gray-900/10" />
                                 </div>
                                 <div className="mt-4 flex items-center justify-center gap-4">
-                                    <button type="button" className="h-10 w-10 rounded-full bg-white/70 border border-white/70 shadow-sm hover:shadow transition flex items-center justify-center">
+                                    <div className="h-10 w-10 rounded-full bg-white/70 border border-white/70 shadow-sm hover:shadow transition flex items-center justify-center">
                                         <div className="flex justify-center space-x-4">
                                             {/* Google Icon */}
-                                            <button className="p-3 rounded-full bg-white border border-gray-300 hover:bg-gray-50 transition-colors">
+                                            <button type="button" className="p-3 rounded-full bg-white border border-gray-300 hover:bg-gray-50 transition-colors">
                                                 <svg width="24" height="24" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
                                                     <path fill="#EA4335" d="M24 9.5c3.3 0 6.3 1.1 8.6 3.3l6.4-6.4C34.9 2.7 29.8 0.5 24 0.5 14.6 0.5 6.5 5.9 2.7 13.8l7.5 5.8C12 13.6 17.6 9.5 24 9.5z" />
                                                     <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-2.8-.4-4.1H24v7.8h12.7c-.3 2-1.7 5-4.9 7l7.4 5.7c4.3-4 7.3-10 7.3-17.4z" />
@@ -206,13 +240,13 @@ const Login = () => {
                                             </button>
 
                                             {/* GitHub Icon */}
-                                            <button className="p-3 rounded-full bg-white border border-gray-300 hover:bg-gray-50 transition-colors">
+                                            <button type="button" className="p-3 rounded-full bg-white border border-gray-300 hover:bg-gray-50 transition-colors">
                                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                                                     <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.22.682-.48 0-.24-.01-.87-.013-1.71-2.782.6-3.369-1.34-3.369-1.34-.455-1.16-1.11-1.47-1.11-1.47-.908-.62.07-.61.07-.61 1.004.07 1.532 1.03 1.532 1.03.892 1.53 2.341 1.09 2.91.83.09-.65.35-1.09.634-1.34-2.22-.25-4.555-1.11-4.555-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02.8-.22 1.65-.33 2.5-.33.85 0 1.7.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85 0 1.34-.01 2.42-.01 2.75 0 .27.18.58.69.48C19.14 20.17 22 16.42 22 12c0-5.523-4.477-10-10-10z" />
                                                 </svg>
                                             </button>
                                         </div>
-                                    </button>
+                                    </div>
                                 </div>
                             </div>
 

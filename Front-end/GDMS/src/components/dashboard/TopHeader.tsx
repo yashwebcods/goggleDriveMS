@@ -1,8 +1,27 @@
+import { useState } from 'react';
 import SearchBar from './SearchBar';
 
-const TopHeader = () => {
+type Props = {
+  user?: any;
+  onLogout?: () => void;
+};
+
+const getInitials = (user: any) => {
+  const source = (user?.username || user?.email || '').toString().trim();
+  if (!source) return 'NA';
+  const parts = source.split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] || '';
+  const second = (parts[1]?.[0] || parts[0]?.[1] || '').toString();
+  return `${first}${second}`.toUpperCase() || 'NA';
+};
+
+const TopHeader = ({ user, onLogout }: Props) => {
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const label = user?.username || user?.email || '';
+  const subLabel = user?.email && user?.username ? user.email : '';
+
   return (
-    <div className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4">
+    <div className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 relative">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
           <svg width="28" height="28" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
@@ -29,11 +48,68 @@ const TopHeader = () => {
 
       <div className="flex items-center gap-3">
         <div className="ml-1 flex items-center gap-2">
-          <div className="h-9 w-9 rounded-full bg-gray-200 overflow-hidden flex items-center justify-center text-xs font-semibold text-gray-700">
-            PS
-          </div>
+          {label ? (
+            <div className="hidden sm:flex flex-col items-end leading-tight">
+              <div className="text-sm font-medium text-gray-700">{label}</div>
+              {subLabel ? <div className="text-xs text-gray-500">{subLabel}</div> : null}
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={() => setIsProfileOpen(true)}
+            className="h-9 w-9 rounded-full bg-gray-200 overflow-hidden flex items-center justify-center text-xs font-semibold text-gray-700"
+            aria-label="Open profile"
+          >
+            {getInitials(user)}
+          </button>
         </div>
       </div>
+
+      {isProfileOpen ? (
+        <div className="absolute inset-0 z-50">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setIsProfileOpen(false)}
+            aria-label="Close profile"
+          />
+
+          <div className="absolute right-0 top-0 h-full w-full max-w-sm bg-white shadow-2xl border-l border-gray-200 p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-gray-900">Profile</div>
+              <button
+                type="button"
+                onClick={() => setIsProfileOpen(false)}
+                className="text-sm text-gray-600 hover:text-gray-900"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-gray-200 p-4">
+              <div className="text-sm text-gray-900 font-medium">{user?.username || '—'}</div>
+              <div className="text-sm text-gray-600 mt-1">{user?.email || '—'}</div>
+              <div className="text-xs text-gray-500 mt-3">Role: {user?.role || '—'}</div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                className="flex-1 rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                onClick={() => {
+                  localStorage.removeItem('token');
+                  localStorage.removeItem('user');
+                  setIsProfileOpen(false);
+                  onLogout?.();
+                }}
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

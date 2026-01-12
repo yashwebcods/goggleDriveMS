@@ -28,6 +28,18 @@ const userSchema = new mongoose.Schema({
     isActive: {
         type: Boolean,
         default: true
+    },
+    otp: {
+        type: String,
+        default: null
+    },
+    otpExpiresAt: {
+        type: Date,
+        default: null
+    },
+    isValidOtp: {
+        type: Boolean,
+        default: false
     }
 }, {
     timestamps: true
