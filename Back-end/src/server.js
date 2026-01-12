@@ -4,6 +4,7 @@ const cors = require('cors')
 const app = express()
 const port = process.env.PORT || 3000;
 const connectDB = require('./config/mongoose');
+const session = require('express-session');
 
 // Connect to database
 connectDB();
@@ -12,6 +13,16 @@ connectDB();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// session 
+app.use(session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        maxAge: 24 * 60 * 60 * 1000 // 1 day
+    }
+}))
 
 // Routes
 app.use('/api/auth', require('./Routes/auth.routes'));
