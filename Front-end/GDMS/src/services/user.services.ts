@@ -24,6 +24,7 @@ const request = async <TData = any>(
   options: RequestInit = {}
 ): Promise<ServiceResult<TData>> => {
   let res: Response;
+
   try {
     res = await fetch(buildUrl(path), {
       headers: {
@@ -37,7 +38,7 @@ const request = async <TData = any>(
       success: false,
       status: 0,
       message:
-        'Failed to reach API server. Check that your backend is running and that VITE_API_BASE_URL / VITE_API_PROXY_TARGET point to the correct host/port.',
+        'Failed to reach API server. Check that your backend is running and that VITE_API_BASE_URL is correct.',
       data: null as any,
       raw: String(err?.message || err),
     };
@@ -84,7 +85,10 @@ export const userService = {
   login: (email: string, password: string) =>
     request('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        password,
+      }),
     }),
 
   register: (payload: any) =>
@@ -116,7 +120,11 @@ export const userService = {
       body: JSON.stringify({ email, otp }),
     }),
 
-  resetPassword: (email: string, newPassword: string, confirmPassword: string) =>
+  resetPassword: (
+    email: string,
+    newPassword: string,
+    confirmPassword: string
+  ) =>
     request('/api/auth/forget-password', {
       method: 'POST',
       body: JSON.stringify({
