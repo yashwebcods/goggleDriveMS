@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import ChangePassword from '../pages/ChangePassword';
 import Dashboard from '../pages/Dashboard';
+import FolderDetail from '../pages/FolderDetail';
 import ForgotPassword from '../pages/ForgotPassword';
 import Login from '../pages/Login';
 import OtpVerification from '../pages/OtpVerification';
@@ -28,6 +29,14 @@ const AppRoutes = () => {
         element={
           <RequireAuth>
             <Dashboard />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/folders/:folderId"
+        element={
+          <RequireAuth>
+            <FolderDetail />
           </RequireAuth>
         }
       />

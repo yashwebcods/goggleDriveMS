@@ -98,9 +98,9 @@ const MainSection = ({ quickAccess, suggested, files }: MainSectionProps) => {
               <div className="col-span-2">Last modified</div>
             </div>
             <div className="h-px bg-gray-100" />
-            {files.map((f) => (
+            {files.map((f, idx) => (
               <div
-                key={f.name}
+                key={f.id || `${f.name}-${idx}`}
                 className={`grid grid-cols-12 px-4 py-3 text-sm items-center border-t border-gray-50 ${
                   f.selected ? 'bg-[#E8F0FE]' : 'bg-white'
                 }`}

@@ -17,4 +17,6 @@ export type FileRow = {
   owner: string;
   modified: string;
   selected?: boolean;
+  id?: string;
+  mimeType?: string;
 };
