@@ -8,42 +8,43 @@ const OtpVerification = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [email, setEmail] = useState('');
-  const [timeLeft, setTimeLeft] = useState(2 * 60); // 6 minutes in seconds
-  const [canResendAt, setCanResendAt] = useState<number | null>(null);
+  const [timeLeft, setTimeLeft] = useState(2 * 60);
+  const [resendLeft, setResendLeft] = useState(2 * 60);
   const [isResending, setIsResending] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
 
+  const secondsUntil = (isoOrDateLike: string) => {
+    const t = new Date(isoOrDateLike).getTime();
+    if (!Number.isFinite(t)) return null;
+    return Math.max(0, Math.ceil((t - Date.now()) / 1000));
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const emailFromQuery = params.get('email') || '';
+    const expiresAtFromQuery = params.get('expiresAt') || '';
     if (!emailFromQuery) {
       navigate('/forgot-password', { replace: true });
       return;
     }
     setEmail(emailFromQuery);
-    // Start countdown when component mounts or email changes
-    setTimeLeft(2 * 60);
-    setCanResendAt(Date.now() + 2 * 60 * 1000); // can resend after 2 minutes
+
+    const initialSecondsLeft = expiresAtFromQuery ? secondsUntil(expiresAtFromQuery) : null;
+    const initial = initialSecondsLeft ?? 2 * 60;
+    setTimeLeft(initial);
+    setResendLeft(initial);
   }, [location.search, navigate]);
 
-  // Countdown timer effect
   useEffect(() => {
-    if (timeLeft <= 0) return;
-
     const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
+      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+      setResendLeft((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft]);
+  }, []);
 
   const handleResendOtp = async () => {
     setIsResending(true);
@@ -52,14 +53,35 @@ const OtpVerification = () => {
     try {
       const result = await userService.sendOtp(email);
       if (!result?.success) {
+        const retryAfterSeconds = (result as any)?.data?.retryAfterSeconds;
+        const otpExpiresAt = (result as any)?.data?.otpExpiresAt;
+        const secondsLeftFromExpiresAt = otpExpiresAt ? secondsUntil(String(otpExpiresAt)) : null;
+        const secondsLeft =
+          typeof retryAfterSeconds === 'number'
+            ? Math.max(0, Math.ceil(retryAfterSeconds))
+            : secondsLeftFromExpiresAt;
+
+        if (result?.status === 429 && typeof secondsLeft === 'number') {
+          setResendLeft(secondsLeft);
+          setTimeLeft(secondsLeft);
+        }
         setError(result?.message || 'Failed to resend OTP');
         setIsResending(false);
         return;
       }
       setSuccess('OTP resent successfully');
-      // Reset countdown: 6 minutes from now, can resend after 2 minutes
-      setTimeLeft(6 * 60);
-      setCanResendAt(Date.now() + 2 * 60 * 1000);
+      setOtp('');
+
+      const otpExpiresAt = (result as any)?.data?.otpExpiresAt;
+      const expiresInSeconds = (result as any)?.data?.expiresInSeconds;
+      const secondsLeftFromExpiresAt = otpExpiresAt ? secondsUntil(String(otpExpiresAt)) : null;
+      const next =
+        typeof expiresInSeconds === 'number'
+          ? Math.max(0, Math.ceil(expiresInSeconds))
+          : secondsLeftFromExpiresAt ?? 2 * 60;
+
+      setTimeLeft(next);
+      setResendLeft(next);
       setIsResending(false);
     } catch (err: any) {
       setError(err?.message || 'Something went wrong');
@@ -74,8 +96,7 @@ const OtpVerification = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const now = Date.now();
-  const showResend = canResendAt !== null && now >= canResendAt && timeLeft > 0;
+  const canResend = resendLeft <= 0;
 
   const handleSubmit = async (e: any) => {
     e.preventDefault();
@@ -156,8 +177,12 @@ const OtpVerification = () => {
                 </div>
                 <input
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value.replace(/\D/g, '').slice(0, 6);
+                    setOtp(next);
+                  }}
                   inputMode="numeric"
+                  maxLength={6}
                   className="block w-full pl-10 pr-3 py-3.5 bg-transparent border-0 rounded-none text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-0"
                   placeholder="Enter OTP"
                   required
@@ -183,16 +208,18 @@ const OtpVerification = () => {
             ) : (
               <span className="text-red-600 font-medium">OTP expired</span>
             )}
-            {showResend && (
-              <button
-                type="button"
-                onClick={handleResendOtp}
-                disabled={isResending}
-                className="ml-4 text-gray-900 underline underline-offset-4 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isResending ? 'Resending…' : 'Resend OTP'}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleResendOtp}
+              disabled={!canResend || isResending}
+              className="ml-4 text-gray-900 underline underline-offset-4 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isResending
+                ? 'Resending…'
+                : canResend
+                  ? 'Resend OTP'
+                  : `Resend in ${formatTime(resendLeft)}`}
+            </button>
           </div>
 
           <div className="mt-2 text-center text-sm text-gray-700/70">

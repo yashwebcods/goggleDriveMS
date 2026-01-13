@@ -40,6 +40,22 @@ const userSchema = new mongoose.Schema({
     isValidOtp: {
         type: Boolean,
         default: false
+    },
+    otpSendCount: {
+        type: Number,
+        default: 0
+    },
+    otpSendLockedUntil: {
+        type: Date,
+        default: null
+    },
+    otpVerifyAttempts: {
+        type: Number,
+        default: 0
+    },
+    otpVerifyLockedUntil: {
+        type: Date,
+        default: null
     }
 }, {
     timestamps: true

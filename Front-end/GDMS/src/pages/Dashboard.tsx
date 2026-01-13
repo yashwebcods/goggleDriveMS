@@ -7,8 +7,8 @@ import { useNavigate } from 'react-router-dom';
 import { userService } from '../services/user.services';
 const Dashboard = () => {
   const [profile, setProfile] = useState<any>(null);
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [, setError] = useState('');
+  const [, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -74,16 +74,6 @@ const Dashboard = () => {
           navigate('/login', { replace: true });
         }}
       />
-
-      <div className="px-4 pt-3">
-        {isLoading ? <div className="text-sm text-gray-600">Loading profile...</div> : null}
-        {!isLoading && error ? (
-          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-            {error}
-          </div>
-        ) : null}
-      </div>
-
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <MainSection quickAccess={quickAccess} suggested={suggested} files={files} />

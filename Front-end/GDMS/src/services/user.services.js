@@ -12,13 +12,25 @@ const safeParseJson = (text) => {
 };
 
 const request = async (path, options = {}) => {
-  const res = await fetch(buildUrl(path), {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
+  let res;
+  try {
+    res = await fetch(buildUrl(path), {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+      ...options,
+    });
+  } catch (err) {
+    return {
+      success: false,
+      status: 0,
+      message:
+        'Failed to reach API server. Check that your backend is running and that VITE_API_BASE_URL / VITE_API_PROXY_TARGET point to the correct host/port.',
+      data: null,
+      raw: String(err?.message || err),
+    };
+  }
 
   const raw = await res.text();
   const json = safeParseJson(raw);

@@ -28,7 +28,9 @@ const ForgotPassword = () => {
       setIsLoading(false);
 
       setTimeout(() => {
-        navigate(`/otp?email=${encodeURIComponent(email)}`);
+        const otpExpiresAt = (result as any)?.data?.otpExpiresAt;
+        const expiresAtParam = otpExpiresAt ? `&expiresAt=${encodeURIComponent(String(otpExpiresAt))}` : '';
+        navigate(`/otp?email=${encodeURIComponent(email)}${expiresAtParam}`);
       }, 800);
     } catch (err: any) {
       setError(err?.message || 'Something went wrong');

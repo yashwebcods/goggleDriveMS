@@ -172,6 +172,9 @@ const getUserProfile = async (req, res) => {
 const sendOtp = async (req, res) => {
     try {
         const { email } = req.body;
+        const OTP_RESEND_SECONDS = 2 * 60;
+        const OTP_SEND_LIMIT = 3;
+        const OTP_LOCK_MS = 60 * 60 * 1000;
 
         if (!email) {
             return res.status(400).json({
@@ -187,6 +190,48 @@ const sendOtp = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: 'User not found'
+            });
+        }
+
+        if (user.otpSendLockedUntil && user.otpSendLockedUntil.getTime() > Date.now()) {
+            const secondsLeft = Math.ceil((user.otpSendLockedUntil.getTime() - Date.now()) / 1000);
+            return res.status(429).json({
+                success: false,
+                message: 'After sending the OTP, wait one hour.',
+                data: {
+                    retryAfterSeconds: secondsLeft,
+                    lockedUntil: user.otpSendLockedUntil
+                }
+            });
+        }
+
+        if (user.otpSendLockedUntil && user.otpSendLockedUntil.getTime() <= Date.now()) {
+            user.otpSendLockedUntil = null;
+            user.otpSendCount = 0;
+        }
+
+        if (user.otp && user.otpExpiresAt && user.otpExpiresAt.getTime() > Date.now()) {
+            const secondsLeft = Math.ceil((user.otpExpiresAt.getTime() - Date.now()) / 1000);
+            return res.status(429).json({
+                success: false,
+                message: `Please wait ${secondsLeft} seconds before resending OTP`,
+                data: {
+                    retryAfterSeconds: secondsLeft,
+                    otpExpiresAt: user.otpExpiresAt
+                }
+            });
+        }
+
+        if ((user.otpSendCount || 0) >= OTP_SEND_LIMIT) {
+            user.otpSendLockedUntil = new Date(Date.now() + OTP_LOCK_MS);
+            await user.save();
+            return res.status(429).json({
+                success: false,
+                message: 'After sending the OTP, wait one hour.',
+                data: {
+                    retryAfterSeconds: Math.ceil(OTP_LOCK_MS / 1000),
+                    lockedUntil: user.otpSendLockedUntil
+                }
             });
         }
         if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASS || !process.env.MAIL_FROM) {
@@ -207,8 +252,12 @@ const sendOtp = async (req, res) => {
 
         // Save OTP to user
         user.otp = hashedOtp;
-        user.otpExpiresAt = new Date(Date.now() + 2 * 60 * 1000);
+        user.otpExpiresAt = new Date(Date.now() + OTP_RESEND_SECONDS * 1000);
         user.isValidOtp = false;
+
+        user.otpSendCount = (user.otpSendCount || 0) + 1;
+        user.otpVerifyAttempts = 0;
+        user.otpVerifyLockedUntil = null;
         await user.save();
 
         // Send OTP to user
@@ -308,7 +357,13 @@ const sendOtp = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            message: 'OTP sent to your email'
+            message: 'OTP sent to your email',
+            data: {
+                otpExpiresAt: user.otpExpiresAt,
+                expiresInSeconds: OTP_RESEND_SECONDS,
+                otpSendCount: user.otpSendCount,
+                otpSendLimit: OTP_SEND_LIMIT
+            }
         });
 
     } catch (error) {
@@ -324,6 +379,8 @@ const sendOtp = async (req, res) => {
 const verifyOtp = async (req, res) => {
     try {
         const { email, otp } = req.body;
+        const OTP_VERIFY_LIMIT = 3;
+        const OTP_VERIFY_LOCK_MS = 60 * 60 * 1000;
 
         if (!email || !otp) {
             return res.status(400).json({
@@ -337,6 +394,36 @@ const verifyOtp = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: 'User not found'
+            });
+        }
+
+        if (user.otpVerifyLockedUntil && user.otpVerifyLockedUntil.getTime() > Date.now()) {
+            const secondsLeft = Math.ceil((user.otpVerifyLockedUntil.getTime() - Date.now()) / 1000);
+            return res.status(429).json({
+                success: false,
+                message: 'Verify the OTP after 1 hour.',
+                data: {
+                    retryAfterSeconds: secondsLeft,
+                    lockedUntil: user.otpVerifyLockedUntil
+                }
+            });
+        }
+
+        if (user.otpVerifyLockedUntil && user.otpVerifyLockedUntil.getTime() <= Date.now()) {
+            user.otpVerifyLockedUntil = null;
+            user.otpVerifyAttempts = 0;
+        }
+
+        if ((user.otpVerifyAttempts || 0) >= OTP_VERIFY_LIMIT) {
+            user.otpVerifyLockedUntil = new Date(Date.now() + OTP_VERIFY_LOCK_MS);
+            await user.save();
+            return res.status(429).json({
+                success: false,
+                message: 'Verify the OTP after 1 hour.',
+                data: {
+                    retryAfterSeconds: Math.ceil(OTP_VERIFY_LOCK_MS / 1000),
+                    lockedUntil: user.otpVerifyLockedUntil
+                }
             });
         }
 
@@ -363,12 +450,19 @@ const verifyOtp = async (req, res) => {
             user.isValidOtp = true;
             user.otp = null;
             user.otpExpiresAt = null;
+            user.otpVerifyAttempts = 0;
+            user.otpVerifyLockedUntil = null;
             await user.save();
             return res.status(200).json({
                 success: true,
                 message: 'OTP verified successfully'
             });
         } else {
+            user.otpVerifyAttempts = (user.otpVerifyAttempts || 0) + 1;
+            if (user.otpVerifyAttempts >= OTP_VERIFY_LIMIT) {
+                user.otpVerifyLockedUntil = new Date(Date.now() + OTP_VERIFY_LOCK_MS);
+            }
+            await user.save();
             return res.status(401).json({
                 success: false,
                 message: 'Invalid OTP'
