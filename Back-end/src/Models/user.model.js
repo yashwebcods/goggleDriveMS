@@ -56,6 +56,34 @@ const userSchema = new mongoose.Schema({
     otpVerifyLockedUntil: {
         type: Date,
         default: null
+    },
+    google: {
+        drive: {
+            connected: {
+                type: Boolean,
+                default: false
+            },
+            accessToken: {
+                type: String,
+                default: null
+            },
+            refreshToken: {
+                type: String,
+                default: null
+            },
+            expiryDate: {
+                type: Number,
+                default: null
+            },
+            scope: {
+                type: String,
+                default: null
+            },
+            tokenType: {
+                type: String,
+                default: null
+            }
+        }
     }
 }, {
     timestamps: true
