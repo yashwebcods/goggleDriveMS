@@ -62,6 +62,18 @@ const Sidebar = () => {
           </div>
           Recent
         </div>
+        <Link to="/access-control" className="px-3 py-2 text-gray-600 flex items-center gap-3 rounded-lg hover:bg-gray-50">
+          <div className="h-5 w-5 text-gray-500">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 11V14" stroke="#9CA3AF" strokeWidth="1.7" strokeLinecap="round" />
+              <path d="M9 11V14" stroke="#9CA3AF" strokeWidth="1.7" strokeLinecap="round" />
+              <path d="M15 11V14" stroke="#9CA3AF" strokeWidth="1.7" strokeLinecap="round" />
+              <path d="M20 10V17C20 19 18.5 20 16.5 20H7.5C5.5 20 4 19 4 17V10" stroke="#9CA3AF" strokeWidth="1.7" strokeLinecap="round" />
+              <path d="M7 10V7.5C7 5.6 8.6 4 10.5 4H13.5C15.4 4 17 5.6 17 7.5V10" stroke="#9CA3AF" strokeWidth="1.7" strokeLinecap="round" />
+            </svg>
+          </div>
+          Access Control
+        </Link>
         <div className="px-3 py-2 text-gray-600 flex items-center gap-3 rounded-lg hover:bg-gray-50">
           <div className="h-5 w-5 text-gray-500">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

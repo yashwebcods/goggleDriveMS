@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import ChangePassword from '../pages/ChangePassword';
 import Dashboard from '../pages/Dashboard';
+import FileAccessControl from '../pages/FileAccessControl';
 import FolderDetail from '../pages/FolderDetail';
 import ForgotPassword from '../pages/ForgotPassword';
 import Login from '../pages/Login';
@@ -37,6 +38,14 @@ const AppRoutes = () => {
         element={
           <RequireAuth>
             <FolderDetail />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/access-control"
+        element={
+          <RequireAuth>
+            <FileAccessControl />
           </RequireAuth>
         }
       />

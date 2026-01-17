@@ -14,6 +14,8 @@ const {
   itemRename,
   itemDelete,
   itemShare,
+  permissionsList,
+  permissionRemove,
 } = require('../Controllers/drive.controller');
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -30,5 +32,8 @@ router.get('/download/:fileId', protect, fileDownload);
 router.patch('/files/:fileId', protect, itemRename);
 router.delete('/files/:fileId', protect, itemDelete);
 router.post('/files/:fileId/share', protect, itemShare);
+
+router.get('/files/:fileId/permissions', protect, permissionsList);
+router.delete('/files/:fileId/permissions/:permissionId', protect, permissionRemove);
 
 module.exports = router;

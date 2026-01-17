@@ -173,12 +173,19 @@ const deleteFile = async ({ userId, fileId }) => {
   return { deleted: true };
 };
 
-const shareFile = async ({ userId, fileId, email }) => {
+const shareFile = async ({ userId, fileId, email, role }) => {
   const { drive } = await getDriveClientForUser(userId);
 
+  const resolvedRole = role || 'reader';
+  if (!['reader', 'commenter', 'writer'].includes(resolvedRole)) {
+    const err = new Error('Invalid role');
+    err.statusCode = 400;
+    throw err;
+  }
+
   const requestBody = email
-    ? { type: 'user', role: 'reader', emailAddress: email }
-    : { type: 'anyone', role: 'reader' };
+    ? { type: 'user', role: resolvedRole, emailAddress: email }
+    : { type: 'anyone', role: resolvedRole };
 
   await drive.permissions.create({
     fileId,
@@ -192,6 +199,21 @@ const shareFile = async ({ userId, fileId, email }) => {
   });
 
   return { link: data.webViewLink, id: data.id, name: data.name };
+};
+
+const listPermissions = async ({ userId, fileId }) => {
+  const { drive } = await getDriveClientForUser(userId);
+  const { data } = await drive.permissions.list({
+    fileId,
+    fields: 'permissions(id, type, role, emailAddress, displayName, domain, allowFileDiscovery)',
+  });
+  return { permissions: data.permissions || [] };
+};
+
+const removePermission = async ({ userId, fileId, permissionId }) => {
+  const { drive } = await getDriveClientForUser(userId);
+  await drive.permissions.delete({ fileId, permissionId });
+  return { removed: true };
 };
 
 const uploadFile = async ({ userId, files, parentId }) => {
@@ -432,6 +454,8 @@ module.exports = {
   renameFile,
   deleteFile,
   shareFile,
+  listPermissions,
+  removePermission,
   getFileMeta,
   downloadFolderZipStream,
   downloadFileStream,

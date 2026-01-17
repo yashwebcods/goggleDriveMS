@@ -30,6 +30,7 @@ connectDB()
         // Routes
         app.use('/api/auth', require('./Routes/auth.routes'));
         app.use('/api/drive', require('./Routes/drive.routes'));
+        app.use('/api/users', require('./Routes/user.routes'));
 
         // Health check
         app.get('/', (req, res) => {

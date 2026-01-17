@@ -218,6 +218,28 @@ export const driveService = {
       body: JSON.stringify({ email }),
     }),
 
+  shareToUser: (token: string, fileId: string, targetUserId: string, role: 'reader' | 'commenter' | 'writer') =>
+    requestJson<any>(`/api/drive/files/${encodeURIComponent(fileId)}/share`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ targetUserId, role }),
+    }),
+
+  listPermissions: (token: string, fileId: string) =>
+    requestJson<{ permissions: any[] }>(`/api/drive/files/${encodeURIComponent(fileId)}/permissions`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  removePermission: (token: string, fileId: string, permissionId: string) =>
+    requestJson<any>(
+      `/api/drive/files/${encodeURIComponent(fileId)}/permissions/${encodeURIComponent(permissionId)}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    ),
+
   downloadFile: async (token: string, fileId: string) => {
     const res = await fetch(buildUrl(`/api/drive/download/${encodeURIComponent(fileId)}`), {
       method: 'GET',
