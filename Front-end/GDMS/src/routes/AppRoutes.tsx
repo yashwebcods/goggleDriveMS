@@ -1,0 +1,75 @@
+import { Navigate, Route, Routes } from 'react-router-dom';
+import type { ReactNode } from 'react';
+
+import ChangePassword from '../pages/ChangePassword';
+import Dashboard from '../pages/Dashboard';
+import FolderDetail from '../pages/FolderDetail';
+import ForgotPassword from '../pages/ForgotPassword';
+import Login from '../pages/Login';
+import OtpVerification from '../pages/OtpVerification';
+import Signup from '../pages/Signup';
+import AddMember from '../pages/AddMember';
+import Team from '../pages/Team';
+import Admin from '../pages/Admin';
+
+const RequireAuth = ({ children }: { children: ReactNode }) => {
+  const token = localStorage.getItem('token') || '';
+  if (!token) return <Navigate to="/login" replace />;
+  return children;
+};
+
+const AppRoutes = () => {
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/otp" element={<OtpVerification />} />
+      <Route path="/change-password" element={<ChangePassword />} />
+      <Route
+        path="/dashboard"
+        element={
+          <RequireAuth>
+            <Dashboard />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/folders/:folderId"
+        element={
+          <RequireAuth>
+            <FolderDetail />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/add-member"
+        element={
+          <RequireAuth>
+            <AddMember />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/team"
+        element={
+          <RequireAuth>
+            <Team />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <RequireAuth>
+            <Admin />
+          </RequireAuth>
+        }
+      />
+      <Route path="*" element={<Navigate to="/login" replace />} />
+    </Routes>
+  );
+};
+
+export default AppRoutes;

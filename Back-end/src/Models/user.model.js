@@ -22,12 +22,73 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['user', 'admin' , 'superadmin' , 'client'],
-        default: 'user'
+        enum: ['manager', 'admin' , 'superadmin' , 'client'],
+        default: 'client'
     },
-    isActive: {
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+    },
+    isActive: { 
         type: Boolean,
         default: true
+    },
+    otp: {
+        type: String,
+        default: null
+    },
+    otpExpiresAt: {
+        type: Date,
+        default: null
+    },
+    isValidOtp: {
+        type: Boolean,
+        default: false
+    },
+    otpSendCount: {
+        type: Number,
+        default: 0
+    },
+    otpSendLockedUntil: {
+        type: Date,
+        default: null
+    },
+    otpVerifyAttempts: {
+        type: Number,
+        default: 0
+    },
+    otpVerifyLockedUntil: {
+        type: Date,
+        default: null
+    },
+    google: {
+        drive: {
+            connected: {
+                type: Boolean,
+                default: false
+            },
+            accessToken: {
+                type: String,
+                default: null
+            },
+            refreshToken: {
+                type: String,
+                default: null
+            },
+            expiryDate: {
+                type: Number,
+                default: null
+            },
+            scope: {
+                type: String,
+                default: null
+            },
+            tokenType: {
+                type: String,
+                default: null
+            }
+        }
     }
 }, {
     timestamps: true
