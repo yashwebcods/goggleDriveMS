@@ -5,6 +5,7 @@ import TopHeader from '../components/dashboard/TopHeader';
 import type { FileRow } from '../components/dashboard/types';
 import { driveService } from '../services/drive.services';
 import PopupCard from '../components/PopupCard';
+import { getDroppedFiles, type DroppedFile } from '../utils/dragDropFolders';
 
 type LocationState = {
   folderName?: string;
@@ -47,6 +48,23 @@ const FolderDetail = () => {
   const [shareEmail, setShareEmail] = useState<string>('');
   const [shareLink, setShareLink] = useState<string>('');
 
+  const [dropChoiceOpen, setDropChoiceOpen] = useState(false);
+  const [dropFolderFiles, setDropFolderFiles] = useState<DroppedFile[]>([]);
+  const [dropLooseFiles, setDropLooseFiles] = useState<DroppedFile[]>([]);
+
+  const [dropFolderExistsOpen, setDropFolderExistsOpen] = useState(false);
+  const [dropExistingFolderId, setDropExistingFolderId] = useState<string>('');
+  const [dropExistingFolderName, setDropExistingFolderName] = useState<string>('');
+  const [dropRenameAndUploadValue, setDropRenameAndUploadValue] = useState<string>('');
+  const [pendingDropFolderItems, setPendingDropFolderItems] = useState<DroppedFile[]>([]);
+  const [pendingDropLooseItems, setPendingDropLooseItems] = useState<DroppedFile[]>([]);
+
+  const [fileExistsOpen, setFileExistsOpen] = useState(false);
+  const [existingFileId, setExistingFileId] = useState<string>('');
+  const [existingFileName, setExistingFileName] = useState<string>('');
+  const [renameAndUploadFileValue, setRenameAndUploadFileValue] = useState<string>('');
+  const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
+
   const ensureAuth = () => {
     if (!token) {
       navigate('/login', { replace: true });
@@ -68,6 +86,116 @@ const FolderDetail = () => {
     } catch {
       return value;
     }
+  };
+
+  const suggestRename = (name: string) => {
+    const raw = String(name || '').trim();
+    if (!raw) return 'file (1)';
+    const lastDot = raw.lastIndexOf('.');
+    if (lastDot > 0 && lastDot < raw.length - 1) {
+      const base = raw.slice(0, lastDot);
+      const ext = raw.slice(lastDot);
+      return `${base} (1)${ext}`;
+    }
+    return `${raw} (1)`;
+  };
+
+  const createFileWithName = (file: File, newName: string) => {
+    return new File([file], newName, { type: file.type, lastModified: file.lastModified });
+  };
+
+  const uploadDroppedFolderStructure = async (dropped: DroppedFile[]): Promise<boolean> => {
+    if (!ensureAuth()) return false;
+    if (!folderId) return false;
+    if (!dropped.length) return false;
+
+    const folderCache = new Map<string, string>();
+
+    const firstRel = String(dropped[0]?.relativePath || dropped[0]?.file?.name || '');
+    const rootName = firstRel.split('/').filter(Boolean)[0] || '';
+    if (!rootName) {
+      throw new Error('Failed to determine dropped folder name');
+    }
+
+    const rootCreate = await driveService.createFolder(token, rootName, folderId);
+    if (!rootCreate?.success) {
+      if (rootCreate?.status === 409) {
+        const existing = (rootCreate as any)?.data?.existing;
+        const existingId = existing?.id ? String(existing.id) : '';
+        setDropExistingFolderId(existingId);
+        setDropExistingFolderName(String(existing?.name || rootName));
+        setDropRenameAndUploadValue(`${rootName} (1)`);
+        setPendingDropFolderItems(dropped);
+        setDropFolderExistsOpen(true);
+        return false;
+      }
+      throw new Error(rootCreate?.message || 'Failed to create folder');
+    }
+
+    const rootId = String(rootCreate.data?.id || '');
+    if (!rootId) throw new Error('Folder create succeeded but id missing');
+
+    const createOrReuseFolder = async (name: string, parentId?: string) => {
+      const res = await driveService.createFolder(token, name, parentId);
+      if (res?.success) return String(res.data?.id || '');
+      if (res?.status === 409) {
+        const existingId = (res as any)?.data?.existing?.id;
+        if (existingId) return String(existingId);
+      }
+      throw new Error(res?.message || 'Failed to create folder');
+    };
+
+    const ensureFolderPath = async (parts: string[], parentId?: string) => {
+      let currentParent = parentId;
+      for (const part of parts) {
+        const key = `${currentParent || 'root'}::${part}`;
+        const cached = folderCache.get(key);
+        if (cached) {
+          currentParent = cached;
+          continue;
+        }
+        const createdId = await createOrReuseFolder(part, currentParent);
+        folderCache.set(key, createdId);
+        currentParent = createdId;
+      }
+      return currentParent;
+    };
+
+    try {
+      setIsUploading(true);
+      setError('');
+
+      const uploadsByParent = new Map<string, File[]>();
+
+      for (const item of dropped) {
+        const rel = String(item.relativePath || item.file.name);
+        const parts = rel.split('/').filter(Boolean);
+
+        const withoutRoot = parts.slice(1);
+        const folderParts = withoutRoot.slice(0, Math.max(0, withoutRoot.length - 1));
+
+        const targetParent = folderParts.length ? await ensureFolderPath(folderParts, rootId) : rootId;
+        const key = targetParent || '';
+        const existing = uploadsByParent.get(key) || [];
+        existing.push(item.file);
+        uploadsByParent.set(key, existing);
+      }
+
+      for (const [parentKey, filesToUpload] of uploadsByParent.entries()) {
+        const res = await driveService.uploadFile(token, filesToUpload, parentKey || undefined);
+        if (!res?.success) {
+          throw new Error(res?.message || 'Failed to upload');
+        }
+      }
+
+      await loadItems();
+    } catch (e: any) {
+      setError(e?.message || 'Upload failed');
+    } finally {
+      setIsUploading(false);
+    }
+
+    return true;
   };
 
   const loadItems = async () => {
@@ -114,6 +242,31 @@ const FolderDetail = () => {
     if (!ensureAuth()) return;
     if (!folderId) return;
     if (!filesToUpload.length) return;
+
+    const list = await driveService.listFiles(token, folderId, 5000);
+    if (!list?.success) {
+      setError(list?.message || 'Failed to check existing files');
+      return;
+    }
+
+    const existingItems = (list?.data?.files || []) as any[];
+    const existingFileByName = new Map<string, any>();
+    for (const it of existingItems) {
+      if (!it?.name) continue;
+      if (it?.mimeType === 'application/vnd.google-apps.folder') continue;
+      existingFileByName.set(String(it.name), it);
+    }
+
+    const firstConflict = filesToUpload.find((f) => existingFileByName.has(f.name));
+    if (firstConflict) {
+      const existing = existingFileByName.get(firstConflict.name);
+      setExistingFileId(String(existing?.id || ''));
+      setExistingFileName(String(existing?.name || firstConflict.name));
+      setRenameAndUploadFileValue(suggestRename(firstConflict.name));
+      setPendingUploadFiles(filesToUpload);
+      setFileExistsOpen(true);
+      return;
+    }
 
     try {
       setIsUploading(true);
@@ -264,9 +417,29 @@ const FolderDetail = () => {
                   e.preventDefault();
                   e.stopPropagation();
                   setIsDragOver(false);
-                  const dropped = Array.from(e.dataTransfer?.files || []);
-                  if (!dropped.length) return;
-                  uploadToThisFolder(dropped);
+                  (async () => {
+                    const dropped = await getDroppedFiles(e.dataTransfer);
+                    const folderFiles = dropped.filter((d) => d.relativePath.includes('/'));
+                    const looseFiles = dropped.filter((d) => !d.relativePath.includes('/'));
+
+                    if (folderFiles.length && looseFiles.length) {
+                      setDropFolderFiles(folderFiles);
+                      setDropLooseFiles(looseFiles);
+                      setDropChoiceOpen(true);
+                      return;
+                    }
+
+                    if (folderFiles.length) {
+                      await uploadDroppedFolderStructure(folderFiles);
+                      return;
+                    }
+
+                    const files = looseFiles.map((d) => d.file);
+                    if (!files.length) return;
+                    uploadToThisFolder(files);
+                  })().catch((err: any) => {
+                    setError(err?.message || 'Failed to read dropped folder');
+                  });
                 }}
               >
                 <div className="flex items-center justify-between">
@@ -499,6 +672,457 @@ const FolderDetail = () => {
                   {dialogError}
                 </div>
               ) : null}
+            </PopupCard>
+
+            <PopupCard
+              open={fileExistsOpen}
+              title="File already exists"
+              onClose={() => {
+                setFileExistsOpen(false);
+                setExistingFileId('');
+                setExistingFileName('');
+                setRenameAndUploadFileValue('');
+                setPendingUploadFiles([]);
+              }}
+              footer={
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFileExistsOpen(false);
+                      setExistingFileId('');
+                      setExistingFileName('');
+                      setRenameAndUploadFileValue('');
+                      setPendingUploadFiles([]);
+                    }}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!folderId) return;
+                      const existingId = existingFileId;
+                      const queue = pendingUploadFiles;
+                      if (!existingId || !queue.length) return;
+                      const current = queue[0];
+                      const rest = queue.slice(1);
+
+                      setFileExistsOpen(false);
+                      setPendingUploadFiles([]);
+
+                      try {
+                        setIsUploading(true);
+                        setError('');
+
+                        const delRes = await driveService.delete(token, existingId);
+                        if (!delRes?.success) throw new Error(delRes?.message || 'Failed to delete existing file');
+
+                        const upRes = await driveService.uploadFile(token, current, folderId);
+                        if (!upRes?.success) throw new Error(upRes?.message || 'Failed to upload file');
+
+                        await loadItems();
+                      } catch (e: any) {
+                        setError(e?.message || 'Upload failed');
+                        return;
+                      } finally {
+                        setIsUploading(false);
+                        setExistingFileId('');
+                        setExistingFileName('');
+                        setRenameAndUploadFileValue('');
+                      }
+
+                      if (rest.length) {
+                        await uploadToThisFolder(rest);
+                      }
+                    }}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Replace
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!folderId) return;
+                      const queue = pendingUploadFiles;
+                      const nextName = renameAndUploadFileValue.trim();
+                      if (!queue.length || !nextName) return;
+                      const current = createFileWithName(queue[0], nextName);
+                      const rest = queue.slice(1);
+
+                      setFileExistsOpen(false);
+                      setPendingUploadFiles([]);
+
+                      try {
+                        setIsUploading(true);
+                        setError('');
+
+                        const upRes = await driveService.uploadFile(token, current, folderId);
+                        if (!upRes?.success) throw new Error(upRes?.message || 'Failed to upload file');
+
+                        await loadItems();
+                      } catch (e: any) {
+                        setError(e?.message || 'Upload failed');
+                        return;
+                      } finally {
+                        setIsUploading(false);
+                        setExistingFileId('');
+                        setExistingFileName('');
+                        setRenameAndUploadFileValue('');
+                      }
+
+                      if (rest.length) {
+                        await uploadToThisFolder(rest);
+                      }
+                    }}
+                    className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-black"
+                  >
+                    Rename & upload
+                  </button>
+                </div>
+              }
+            >
+              <div className="text-sm text-gray-900 font-medium truncate">{existingFileName}</div>
+              <div className="mt-2 text-sm text-gray-700">A file with this name already exists. What do you want to do?</div>
+              <div className="mt-4">
+                <div className="text-xs font-semibold text-gray-600">New file name</div>
+                <input
+                  value={renameAndUploadFileValue}
+                  onChange={(e) => setRenameAndUploadFileValue(e.target.value)}
+                  className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="Enter a new name"
+                />
+              </div>
+            </PopupCard>
+
+            <PopupCard
+              open={dropChoiceOpen}
+              title="Upload selection"
+              onClose={() => {
+                setDropChoiceOpen(false);
+                setDropFolderFiles([]);
+                setDropLooseFiles([]);
+              }}
+              footer={
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDropChoiceOpen(false);
+                      setDropFolderFiles([]);
+                      setDropLooseFiles([]);
+                    }}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const files = dropLooseFiles.map((d) => d.file);
+                      setDropChoiceOpen(false);
+                      setDropFolderFiles([]);
+                      setDropLooseFiles([]);
+                      if (!files.length) return;
+                      uploadToThisFolder(files);
+                    }}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Upload files
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const files = dropFolderFiles;
+                      setDropChoiceOpen(false);
+                      setDropFolderFiles([]);
+                      setDropLooseFiles([]);
+                      if (!files.length) return;
+                      await uploadDroppedFolderStructure(files);
+                    }}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Upload folder
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const folderItems = dropFolderFiles;
+                      const looseItems = dropLooseFiles;
+                      setDropChoiceOpen(false);
+                      setDropFolderFiles([]);
+                      setDropLooseFiles([]);
+                      if (!folderItems.length && !looseItems.length) return;
+                      setPendingDropLooseItems(looseItems);
+                      if (folderItems.length) {
+                        const didUploadFolder = await uploadDroppedFolderStructure(folderItems);
+                        if (!didUploadFolder) return;
+                      }
+                      const looseFiles = looseItems.map((d) => d.file);
+                      if (looseFiles.length) {
+                        uploadToThisFolder(looseFiles);
+                      }
+                      setPendingDropLooseItems([]);
+                    }}
+                    className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-black"
+                  >
+                    Upload both
+                  </button>
+                </div>
+              }
+            >
+              <div className="text-sm text-gray-700">
+                Your drop contains a folder and also individual files.
+              </div>
+              <div className="mt-3 text-xs text-gray-600">
+                Folder files: {dropFolderFiles.length}
+              </div>
+              <div className="mt-1 text-xs text-gray-600">
+                Individual files: {dropLooseFiles.length}
+              </div>
+            </PopupCard>
+
+            <PopupCard
+              open={dropFolderExistsOpen}
+              title="Folder already exists"
+              onClose={() => {
+                setDropFolderExistsOpen(false);
+                setDropExistingFolderId('');
+                setDropExistingFolderName('');
+                setDropRenameAndUploadValue('');
+                setPendingDropFolderItems([]);
+                setPendingDropLooseItems([]);
+              }}
+              footer={
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDropFolderExistsOpen(false);
+                      setDropExistingFolderId('');
+                      setDropExistingFolderName('');
+                      setDropRenameAndUploadValue('');
+                      setPendingDropFolderItems([]);
+                      setPendingDropLooseItems([]);
+                    }}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const existingId = dropExistingFolderId;
+                      const existingName = dropExistingFolderName;
+                      const dropped = pendingDropFolderItems;
+                      const looseItems = pendingDropLooseItems;
+                      if (!existingId || !dropped.length) return;
+                      setDropFolderExistsOpen(false);
+                      setPendingDropFolderItems([]);
+                      setPendingDropLooseItems([]);
+
+                      const rootName = existingName || String((dropped[0]?.relativePath || '').split('/').filter(Boolean)[0] || '');
+
+                      const folderCache = new Map<string, string>();
+                      const createOrReuseFolder = async (name: string, parentId?: string) => {
+                        const res = await driveService.createFolder(token, name, parentId);
+                        if (res?.success) return String(res.data?.id || '');
+                        if (res?.status === 409) {
+                          const reuseId = (res as any)?.data?.existing?.id;
+                          if (reuseId) return String(reuseId);
+                        }
+                        throw new Error(res?.message || 'Failed to create folder');
+                      };
+
+                      const ensureFolderPath = async (parts: string[], parentId?: string) => {
+                        let currentParent = parentId;
+                        for (const part of parts) {
+                          const key = `${currentParent || 'root'}::${part}`;
+                          const cached = folderCache.get(key);
+                          if (cached) {
+                            currentParent = cached;
+                            continue;
+                          }
+                          const createdId = await createOrReuseFolder(part, currentParent);
+                          folderCache.set(key, createdId);
+                          currentParent = createdId;
+                        }
+                        return currentParent;
+                      };
+
+                      try {
+                        setIsUploading(true);
+                        setError('');
+
+                        const delRes = await driveService.delete(token, existingId);
+                        if (!delRes?.success) {
+                          throw new Error(delRes?.message || 'Failed to delete existing folder');
+                        }
+
+                        let recreatedId = '';
+                        for (let attempt = 0; attempt < 5; attempt++) {
+                          const created = await driveService.createFolder(token, rootName, folderId);
+                          if (created?.success) {
+                            recreatedId = String(created.data?.id || '');
+                            break;
+                          }
+                          if (created?.status === 409) {
+                            await new Promise((r) => setTimeout(r, 500));
+                            continue;
+                          }
+                          throw new Error(created?.message || 'Failed to create folder');
+                        }
+
+                        if (!recreatedId) throw new Error('Failed to recreate folder');
+
+                        const uploadsByParent = new Map<string, File[]>();
+
+                        for (const item of dropped) {
+                          const rel = String(item.relativePath || item.file.name);
+                          const parts = rel.split('/').filter(Boolean);
+                          const withoutRoot = parts.slice(1);
+                          const folderParts = withoutRoot.slice(0, Math.max(0, withoutRoot.length - 1));
+                          const targetParent = folderParts.length
+                            ? await ensureFolderPath(folderParts, recreatedId)
+                            : recreatedId;
+
+                          const key = targetParent || '';
+                          const existing = uploadsByParent.get(key) || [];
+                          existing.push(item.file);
+                          uploadsByParent.set(key, existing);
+                        }
+
+                        for (const [parentKey, filesToUpload] of uploadsByParent.entries()) {
+                          const res = await driveService.uploadFile(token, filesToUpload, parentKey || undefined);
+                          if (!res?.success) throw new Error(res?.message || 'Failed to upload');
+                        }
+
+                        const looseFiles = looseItems.map((d) => d.file);
+                        if (looseFiles.length) {
+                          const res = await driveService.uploadFile(token, looseFiles, folderId);
+                          if (!res?.success) throw new Error(res?.message || 'Failed to upload');
+                        }
+
+                        await loadItems();
+                      } catch (e: any) {
+                        setError(e?.message || 'Upload failed');
+                      } finally {
+                        setIsUploading(false);
+                        setDropExistingFolderId('');
+                        setDropExistingFolderName('');
+                        setDropRenameAndUploadValue('');
+                        setPendingDropLooseItems([]);
+                      }
+                    }}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Use existing
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const nextName = dropRenameAndUploadValue.trim();
+                      const dropped = pendingDropFolderItems;
+                      const looseItems = pendingDropLooseItems;
+                      if (!nextName || !dropped.length || !folderId) return;
+                      setDropFolderExistsOpen(false);
+                      setPendingDropFolderItems([]);
+                      setPendingDropLooseItems([]);
+
+                      try {
+                        setIsUploading(true);
+                        setError('');
+
+                        const created = await driveService.createFolder(token, nextName, folderId);
+                        if (!created?.success) throw new Error(created?.message || 'Failed to create folder');
+                        const rootId = String(created.data?.id || '');
+                        if (!rootId) throw new Error('Folder create succeeded but id missing');
+
+                        const folderCache = new Map<string, string>();
+                        const createOrReuseFolder = async (name: string, parentId?: string) => {
+                          const res = await driveService.createFolder(token, name, parentId);
+                          if (res?.success) return String(res.data?.id || '');
+                          if (res?.status === 409) {
+                            const reuseId = (res as any)?.data?.existing?.id;
+                            if (reuseId) return String(reuseId);
+                          }
+                          throw new Error(res?.message || 'Failed to create folder');
+                        };
+
+                        const ensureFolderPath = async (parts: string[], parentId?: string) => {
+                          let currentParent = parentId;
+                          for (const part of parts) {
+                            const key = `${currentParent || 'root'}::${part}`;
+                            const cached = folderCache.get(key);
+                            if (cached) {
+                              currentParent = cached;
+                              continue;
+                            }
+                            const createdId = await createOrReuseFolder(part, currentParent);
+                            folderCache.set(key, createdId);
+                            currentParent = createdId;
+                          }
+                          return currentParent;
+                        };
+
+                        const uploadsByParent = new Map<string, File[]>();
+
+                        for (const item of dropped) {
+                          const rel = String(item.relativePath || item.file.name);
+                          const parts = rel.split('/').filter(Boolean);
+                          const withoutRoot = parts.slice(1);
+                          const folderParts = withoutRoot.slice(0, Math.max(0, withoutRoot.length - 1));
+                          const targetParent = folderParts.length
+                            ? await ensureFolderPath(folderParts, rootId)
+                            : rootId;
+
+                          const key = targetParent || '';
+                          const existing = uploadsByParent.get(key) || [];
+                          existing.push(item.file);
+                          uploadsByParent.set(key, existing);
+                        }
+
+                        for (const [parentKey, filesToUpload] of uploadsByParent.entries()) {
+                          const res = await driveService.uploadFile(token, filesToUpload, parentKey || undefined);
+                          if (!res?.success) throw new Error(res?.message || 'Failed to upload');
+                        }
+
+                        const looseFiles = looseItems.map((d) => d.file);
+                        if (looseFiles.length) {
+                          const res = await driveService.uploadFile(token, looseFiles, folderId);
+                          if (!res?.success) throw new Error(res?.message || 'Failed to upload');
+                        }
+
+                        await loadItems();
+                      } catch (e: any) {
+                        setError(e?.message || 'Upload failed');
+                      } finally {
+                        setIsUploading(false);
+                        setDropExistingFolderId('');
+                        setDropExistingFolderName('');
+                        setDropRenameAndUploadValue('');
+                        setPendingDropLooseItems([]);
+                      }
+                    }}
+                    className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-black"
+                  >
+                    Rename & upload
+                  </button>
+                </div>
+              }
+            >
+              <div className="text-sm text-gray-900 font-medium truncate">{dropExistingFolderName}</div>
+              <div className="mt-2 text-sm text-gray-700">A folder with this name already exists. What do you want to do?</div>
+              <div className="mt-4">
+                <div className="text-xs font-semibold text-gray-600">New folder name</div>
+                <input
+                  value={dropRenameAndUploadValue}
+                  onChange={(e) => setDropRenameAndUploadValue(e.target.value)}
+                  className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="Enter a new name"
+                />
+              </div>
             </PopupCard>
           </div>
         </div>

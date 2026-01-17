@@ -139,8 +139,31 @@ const listFiles = async ({ userId, parentId, pageSize = 50 }) => {
   return { files };
 };
 
+const escapeDriveQueryValue = (value) => {
+  return String(value || '').replace(/'/g, "\\'");
+};
+
 const createFolder = async ({ userId, name, parentId }) => {
   const { drive } = await getDriveClientForUser(userId);
+
+  const parentKey = parentId || 'root';
+  const q = `name = '${escapeDriveQueryValue(name)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false and '${escapeDriveQueryValue(
+    parentKey
+  )}' in parents`;
+
+  const existing = await drive.files.list({
+    q,
+    pageSize: 1,
+    fields: 'files(id, name, mimeType, parents)',
+  });
+
+  const existingFolder = (existing?.data?.files || [])[0];
+  if (existingFolder) {
+    const err = new Error('Folder already exists');
+    err.statusCode = 409;
+    err.data = { existing: existingFolder };
+    throw err;
+  }
 
   const requestBody = {
     name,

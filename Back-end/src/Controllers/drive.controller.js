@@ -168,7 +168,7 @@ const folderCreate = async (req, res) => {
     return res.status(201).json({ success: true, data });
   } catch (error) {
     const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({ success: false, message: error.message });
+    return res.status(statusCode).json({ success: false, message: error.message, data: error.data });
   }
 };
 
