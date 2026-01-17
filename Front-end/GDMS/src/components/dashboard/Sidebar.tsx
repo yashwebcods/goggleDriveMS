@@ -68,6 +68,22 @@ const Sidebar = () => {
             Admin
           </Link>
         ) : null}
+
+        {role === 'admin' || role === 'superadmin' || role === 'manager' ? (
+          <Link
+            to="/file-access-control"
+            className="px-3 py-2 text-gray-600 flex items-center gap-3 rounded-lg hover:bg-gray-50"
+          >
+            <div className="h-5 w-5 text-gray-500">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 3L20 7V12C20 16.418 16.418 20 12 21C7.582 20 4 16.418 4 12V7L12 3Z" stroke="#9CA3AF" strokeWidth="1.7" />
+                <path d="M9 12H15" stroke="#9CA3AF" strokeWidth="1.7" strokeLinecap="round" />
+                <path d="M9 16H13" stroke="#9CA3AF" strokeWidth="1.7" strokeLinecap="round" />
+              </svg>
+            </div>
+            File Access Control
+          </Link>
+        ) : null}
         <div className="px-3 py-2 text-gray-600 flex items-center gap-3 rounded-lg hover:bg-gray-50">
           <div className="h-5 w-5 text-gray-500">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

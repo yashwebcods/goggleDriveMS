@@ -11,6 +11,7 @@ import Signup from '../pages/Signup';
 import AddMember from '../pages/AddMember';
 import Team from '../pages/Team';
 import Admin from '../pages/Admin';
+import FileAccessControl from '../pages/FileAccessControl';
 
 const RequireAuth = ({ children }: { children: ReactNode }) => {
   const token = localStorage.getItem('token') || '';
@@ -64,6 +65,14 @@ const AppRoutes = () => {
         element={
           <RequireAuth>
             <Admin />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/file-access-control"
+        element={
+          <RequireAuth>
+            <FileAccessControl />
           </RequireAuth>
         }
       />
