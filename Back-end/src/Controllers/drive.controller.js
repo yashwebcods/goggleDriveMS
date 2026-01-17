@@ -7,11 +7,15 @@ const {
   renameFile,
   deleteFile,
   shareFile,
+  listPermissions,
+  removePermission,
   getFileMeta,
   downloadFolderZipStream,
   downloadFileStream,
   getDriveStatus,
 } = require('../services/googleDrive.service');
+
+const User = require('../Models/user.model');
 
 const getAuthUrl = async (req, res) => {
   try {
@@ -52,8 +56,48 @@ const itemDelete = async (req, res) => {
 const itemShare = async (req, res) => {
   try {
     const { fileId } = req.params;
-    const { email } = req.body || {};
-    const data = await shareFile({ userId: req.user._id, fileId, email: email || undefined });
+    const { email, targetUserId, role } = req.body || {};
+
+    let resolvedEmail = email || undefined;
+
+    if (!resolvedEmail && targetUserId) {
+      const targetUser = await User.findById(targetUserId).select('email isActive');
+      if (!targetUser || !targetUser.email) {
+        return res.status(404).json({ success: false, message: 'Target user not found' });
+      }
+      if (!targetUser.isActive) {
+        return res.status(400).json({ success: false, message: 'Target user is not active' });
+      }
+      resolvedEmail = targetUser.email;
+    }
+
+    if (resolvedEmail && String(resolvedEmail).toLowerCase() === String(req.user.email || '').toLowerCase()) {
+      return res.status(400).json({ success: false, message: 'You cannot share to yourself' });
+    }
+
+    const data = await shareFile({ userId: req.user._id, fileId, email: resolvedEmail, role: role || undefined });
+    return res.json({ success: true, data });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({ success: false, message: error.message });
+  }
+};
+
+const permissionsList = async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const data = await listPermissions({ userId: req.user._id, fileId });
+    return res.json({ success: true, data });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({ success: false, message: error.message });
+  }
+};
+
+const permissionRemove = async (req, res) => {
+  try {
+    const { fileId, permissionId } = req.params;
+    const data = await removePermission({ userId: req.user._id, fileId, permissionId });
     return res.json({ success: true, data });
   } catch (error) {
     const statusCode = error.statusCode || 500;
@@ -223,4 +267,6 @@ module.exports = {
   itemRename,
   itemDelete,
   itemShare,
+  permissionsList,
+  permissionRemove,
 };
