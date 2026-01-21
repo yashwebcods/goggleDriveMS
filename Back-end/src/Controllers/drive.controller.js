@@ -324,7 +324,7 @@ const oauthCallback = async (req, res) => {
 
     if (error) {
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-      return res.redirect(`${frontendUrl}/dashboard?drive=error`);
+      return res.redirect(`${frontendUrl}/#/dashboard?drive=error`);
     }
 
     if (!code || !state) {
@@ -334,7 +334,7 @@ const oauthCallback = async (req, res) => {
     await handleOAuthCallback({ code, state });
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    return res.redirect(`${frontendUrl}/dashboard?drive=connected`);
+    return res.redirect(`${frontendUrl}/#/dashboard?drive=connected`);
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message });
   }

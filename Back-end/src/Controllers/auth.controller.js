@@ -353,7 +353,7 @@ const sendOtp = async (req, res) => {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-        const verificationLink = `${frontendUrl}/otp?email=${encodeURIComponent(email)}`;
+        const verificationLink = `${frontendUrl}/#/otp?email=${encodeURIComponent(email)}`;
 
         // hash otp
         const hashedOtp = await bcrypt.hash(otp, 10);
