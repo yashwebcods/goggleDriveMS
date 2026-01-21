@@ -276,20 +276,6 @@ const Dashboard = () => {
     return true;
   };
 
-  const uploadToFolderAction = async (folderId: string, files: File[]) => {
-    if (!ensureAuth()) return;
-    try {
-      setError('');
-      const result = await driveService.uploadFile(token, files, folderId);
-      if (!result?.success) {
-        setError(result?.message || 'Failed to upload file');
-        return;
-      }
-      await loadDriveFiles();
-    } catch (e: any) {
-      setError(e?.message || 'Upload failed');
-    }
-  };
 
   const uploadToFolderWithPopup = async (folderId: string, files: File[]) => {
     const count = Array.isArray(files) ? files.length : 0;
@@ -565,7 +551,7 @@ const Dashboard = () => {
   return (
     <div className="h-screen bg-[#F6F8FB] text-gray-900 flex flex-col overflow-hidden">
       {toastOpen ? (
-        <div className="fixed right-4 top-4 z-[120]">
+        <div className="fixed right-4 top-4 z-120">
           <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 shadow-lg">
             {toastMessage}
           </div>
