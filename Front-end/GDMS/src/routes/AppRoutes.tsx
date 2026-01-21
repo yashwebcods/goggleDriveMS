@@ -7,6 +7,7 @@ import Dashboard from '../pages/Dashboard';
 import FileAccessControl from '../pages/FileAccessControl';
 import FolderDetail from '../pages/FolderDetail';
 import ForgotPassword from '../pages/ForgotPassword';
+import Home from '../pages/Home';
 import Login from '../pages/Login';
 import OtpVerification from '../pages/OtpVerification';
 import PrivacyPolicy from '../pages/PrivacyPolicy';
@@ -47,7 +48,7 @@ const AppRoutes = () => {
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to={token ? '/dashboard' : '/login'} replace />} />
+      <Route path="/" element={token ? <Navigate to="/dashboard" replace /> : <Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
