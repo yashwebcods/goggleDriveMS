@@ -12,6 +12,9 @@ export const getFriendlyRequestMessages = (method: string, path: string) => {
   if (m === 'POST' && p === '/api/drive/upload') {
     return { success: 'File uploaded successfully', error: 'Failed to upload file' };
   }
+  if (m === 'POST' && p === '/api/drive/disconnect') {
+    return { success: 'Drive disconnected successfully', error: 'Failed to disconnect Drive' };
+  }
   if (m === 'POST' && p === '/api/drive/share') {
     return { success: 'Shared successfully', error: 'Failed to share' };
   }

@@ -202,6 +202,12 @@ export const driveService = {
       headers: { Authorization: `Bearer ${token}` },
     }),
 
+  disconnect: (token: string) =>
+    requestJson<{ disconnected: boolean }>('/api/drive/disconnect', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
   status: (token: string) =>
     requestJson<{ connected: boolean }>('/api/drive/status', {
       method: 'GET',

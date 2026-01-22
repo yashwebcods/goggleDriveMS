@@ -681,8 +681,9 @@ const folderCreate = async (req, res) => {
 
     return res.status(201).json({ success: true, data });
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({ success: false, message: error.message, data: error.data });
+    const statusCode = error.statusCode || error?.code || error?.response?.status || 500;
+    const apiMessage = error?.response?.data?.error?.message || error?.response?.data?.message;
+    return res.status(statusCode).json({ success: false, message: apiMessage || error.message, data: error.data });
   }
 };
 
@@ -713,8 +714,9 @@ const fileUpload = async (req, res) => {
 
     return res.status(201).json({ success: true, data });
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({ success: false, message: error.message });
+    const statusCode = error.statusCode || error?.code || error?.response?.status || 500;
+    const apiMessage = error?.response?.data?.error?.message || error?.response?.data?.message;
+    return res.status(statusCode).json({ success: false, message: apiMessage || error.message });
   }
 };
 
@@ -778,8 +780,9 @@ const fileDownload = async (req, res) => {
 
     return stream.pipe(res);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    return res.status(statusCode).json({ success: false, message: error.message });
+    const statusCode = error.statusCode || error?.code || error?.response?.status || 500;
+    const apiMessage = error?.response?.data?.error?.message || error?.response?.data?.message;
+    return res.status(statusCode).json({ success: false, message: apiMessage || error.message });
   }
 };
 

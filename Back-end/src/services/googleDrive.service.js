@@ -6,7 +6,7 @@ const archiver = require('archiver');
 
 const GDMS_APP_PROPERTY_KEY = 'gdms';
 const GDMS_APP_PROPERTY_VALUE = 'true';
-const GDMS_APP_PROPERTY_QUERY = `appProperties has { key='${GDMS_APP_PROPERTY_KEY}', value='${GDMS_APP_PROPERTY_VALUE}' }`;
+const GDMS_APP_PROPERTY_QUERY = `appProperties has { key='${GDMS_APP_PROPERTY_KEY}' and value='${GDMS_APP_PROPERTY_VALUE}' }`;
 
 const REQUIRED_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 

@@ -434,6 +434,28 @@ const Dashboard = () => {
     window.location.href = url;
   };
 
+  const disconnectDrive = async () => {
+    if (!ensureAuth()) return;
+    setError('');
+
+    const result = await driveService.disconnect(token);
+    if (!result?.success) {
+      if (result?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login', { replace: true });
+        return;
+      }
+      setError(result?.message || 'Failed to disconnect Google Drive');
+      return;
+    }
+
+    setDriveConnected(false);
+    setRootItems([]);
+    setItems([]);
+    showToast('Google Drive disconnected');
+  };
+
   const createFolderAction = async () => {
     if (!ensureAuth()) return;
     const name = folderName.trim();
@@ -585,6 +607,15 @@ const Dashboard = () => {
               >
                 {driveConnected ? 'Reconnect Google Drive' : 'Connect Google Drive'}
               </button>
+              {driveConnected ? (
+                <button
+                  type="button"
+                  onClick={disconnectDrive}
+                  className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
+                >
+                  Disconnect Google Drive
+                </button>
+              ) : null}
               <div className="ml-auto text-xs text-gray-600">
                 Drive: {driveConnected ? 'Connected' : 'Not connected'}
               </div>
