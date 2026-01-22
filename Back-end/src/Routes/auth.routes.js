@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { registerUser, loginUser, googleLogin, getUserProfile, sendOtp, verifyOtp, forgetPassword, createMember, assignClientManager, getTeamOverview, getAdminSummary } = require('../Controllers/auth.controller');
+const { registerUser, loginUser, googleLogin, getUserProfile, sendOtp, verifyOtp, forgetPassword, createMember, assignClientManager, assignManagerAdmin, assignAdminSuperAdmin, getTeamOverview, getAdminSummary } = require('../Controllers/auth.controller');
 const { protect } = require('../middleware/auth.middleware');
 
 // Public routes
@@ -14,6 +14,8 @@ router.post('/forget-password', forgetPassword)
 router.get('/profile', protect, getUserProfile);
 router.post('/members', protect, createMember);
 router.patch('/clients/:clientId/manager', protect, assignClientManager);
+router.patch('/managers/:managerId/admin', protect, assignManagerAdmin);
+router.patch('/admins/:adminId/superadmin', protect, assignAdminSuperAdmin);
 router.get('/team', protect, getTeamOverview);
 router.get('/admin/summary', protect, getAdminSummary);
 

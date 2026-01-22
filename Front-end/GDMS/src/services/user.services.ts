@@ -182,4 +182,28 @@ export const userService = {
       body: JSON.stringify(payload || {}),
     });
   },
+
+  assignAdminSuperAdmin: async (
+    token: string,
+    adminId: string,
+    payload: { superadminId?: string; superadminEmail?: string }
+  ) => {
+    return request(`/api/auth/admins/${encodeURIComponent(adminId)}/superadmin`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload || {}),
+    });
+  },
+
+  assignManagerAdmin: async (
+    token: string,
+    managerId: string,
+    payload: { adminId?: string; adminEmail?: string }
+  ) => {
+    return request(`/api/auth/managers/${encodeURIComponent(managerId)}/admin`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload || {}),
+    });
+  },
 };

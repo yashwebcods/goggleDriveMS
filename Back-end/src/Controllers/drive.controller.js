@@ -103,17 +103,6 @@ const getAutoShareEmailsForUploader = async (uploader) => {
       }
     } catch (_) {
     }
-
-    try {
-      const elevated = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: true })
-        .select('email google.drive.accountEmail')
-        .lean();
-      for (const u of elevated || []) {
-        const email = (u?.google?.drive?.accountEmail || u?.email || '').toString().toLowerCase();
-        if (email) emails.add(email);
-      }
-    } catch (_) {
-    }
   }
 
   if (role === 'manager') {
@@ -150,7 +139,7 @@ const autoShareDriveItem = async ({ uploaderUser, fileId }) => {
   // - If a manager created the folder, clients should get writer.
   // - If a client created the folder, their manager should get writer.
   let managerWriterEmail = null;
-  if (uploaderRole === 'client' && isFolder) {
+  if (uploaderRole === 'client') {
     try {
       const managerId = uploaderUser?.createdBy || null;
       if (managerId) {
@@ -165,7 +154,7 @@ const autoShareDriveItem = async ({ uploaderUser, fileId }) => {
     }
   }
 
-  const shareRole = uploaderRole === 'client' ? 'writer' : uploaderRole === 'manager' && isFolder ? 'writer' : 'reader';
+  const shareRole = uploaderRole === 'client' ? 'reader' : uploaderRole === 'manager' && isFolder ? 'writer' : 'reader';
 
   for (const email of recipients) {
     try {

@@ -85,6 +85,203 @@ const registerUser = async (req, res) => {
     }
 };
 
+const assignManagerAdmin = async (req, res) => {
+    try {
+        if (!req.user || !req.user.id) {
+            return res.status(401).json({
+                success: false,
+                message: 'Not authorized'
+            });
+        }
+
+        const requesterRole = (req.user.role || '').toString();
+        if (requesterRole !== 'superadmin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Not authorized'
+            });
+        }
+
+        const managerId = (req.params?.managerId || '').toString();
+        const { adminId, adminEmail } = req.body || {};
+
+        if (!managerId) {
+            return res.status(400).json({
+                success: false,
+                message: 'managerId is required'
+            });
+        }
+
+        if (!adminId && !adminEmail) {
+            return res.status(400).json({
+                success: false,
+                message: 'adminId or adminEmail is required'
+            });
+        }
+
+        const manager = await User.findById(managerId).select('role createdBy isActive');
+        if (!manager) {
+            return res.status(404).json({
+                success: false,
+                message: 'Manager not found'
+            });
+        }
+
+        if ((manager.role || '').toString() !== 'manager') {
+            return res.status(400).json({
+                success: false,
+                message: 'Target user is not a manager'
+            });
+        }
+
+        if (!manager.isActive) {
+            return res.status(400).json({
+                success: false,
+                message: 'Manager is not active'
+            });
+        }
+
+        const adminQuery = adminId
+            ? { _id: adminId }
+            : { email: adminEmail.toString().trim().toLowerCase() };
+
+        const admin = await User.findOne({
+            ...adminQuery,
+            role: 'admin',
+            isActive: true
+        }).select('_id');
+
+        if (!admin) {
+            return res.status(404).json({
+                success: false,
+                message: 'Admin not found'
+            });
+        }
+
+        manager.createdBy = admin._id;
+        await manager.save();
+
+        const refreshed = await User.findById(managerId)
+            .select('username email role createdBy isActive createdAt')
+            .populate('createdBy', 'username email role')
+            .lean();
+
+        return res.status(200).json({
+            success: true,
+            message: 'Manager admin updated successfully',
+            data: refreshed
+        });
+    } catch (error) {
+        console.error('assignManagerAdmin error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Server Error',
+            error: error?.message
+        });
+    }
+};
+
+const assignAdminSuperAdmin = async (req, res) => {
+    try {
+        if (!req.user || !req.user.id) {
+            return res.status(401).json({
+                success: false,
+                message: 'Not authorized'
+            });
+        }
+
+        const requesterRole = (req.user.role || '').toString();
+        if (requesterRole !== 'superadmin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Not authorized'
+            });
+        }
+
+        const adminId = (req.params?.adminId || '').toString();
+        const { superadminId, superadminEmail } = req.body || {};
+
+        if (!adminId) {
+            return res.status(400).json({
+                success: false,
+                message: 'adminId is required'
+            });
+        }
+
+        const admin = await User.findById(adminId).select('role createdBy isActive');
+        if (!admin) {
+            return res.status(404).json({
+                success: false,
+                message: 'Admin not found'
+            });
+        }
+
+        if ((admin.role || '').toString() !== 'admin') {
+            return res.status(400).json({
+                success: false,
+                message: 'Target user is not an admin'
+            });
+        }
+
+        if (!admin.isActive) {
+            return res.status(400).json({
+                success: false,
+                message: 'Admin is not active'
+            });
+        }
+
+        let resolvedSuperadminId = superadminId;
+        if (!resolvedSuperadminId && superadminEmail) {
+            const su = await User.findOne({
+                email: superadminEmail.toString().trim().toLowerCase(),
+                role: 'superadmin',
+                isActive: true
+            }).select('_id');
+            resolvedSuperadminId = su?._id;
+        }
+
+        if (!resolvedSuperadminId) {
+            resolvedSuperadminId = req.user.id;
+        }
+
+        const superadmin = await User.findById(resolvedSuperadminId).select('_id role isActive');
+        if (!superadmin || (superadmin.role || '').toString() !== 'superadmin') {
+            return res.status(404).json({
+                success: false,
+                message: 'Super admin not found'
+            });
+        }
+
+        if (!superadmin.isActive) {
+            return res.status(400).json({
+                success: false,
+                message: 'Super admin is not active'
+            });
+        }
+
+        admin.createdBy = superadmin._id;
+        await admin.save();
+
+        const refreshed = await User.findById(adminId)
+            .select('username email role createdBy isActive createdAt')
+            .populate('createdBy', 'username email role')
+            .lean();
+
+        return res.status(200).json({
+            success: true,
+            message: 'Admin super admin updated successfully',
+            data: refreshed
+        });
+    } catch (error) {
+        console.error('assignAdminSuperAdmin error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Server Error',
+            error: error?.message
+        });
+    }
+};
+
 // Login User
 const loginUser = async (req, res) => {
     try {
@@ -1187,6 +1384,53 @@ const getAdminSummary = async (req, res) => {
             });
         }
 
+        if (requesterRole === 'admin') {
+            const currentAdmin = await User.findById(req.user.id)
+                .select('username email role createdAt isActive createdBy')
+                .populate('createdBy', 'username email role')
+                .lean();
+
+            if (!currentAdmin || (currentAdmin.role || '').toString() !== 'admin') {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Not authorized'
+                });
+            }
+
+            const managers = await User.find({ role: 'manager', createdBy: req.user.id })
+                .select('username email role createdAt isActive createdBy')
+                .populate('createdBy', 'username email role')
+                .lean();
+
+            const managerIds = managers.map((m) => m._id);
+            const clients = managerIds.length
+                ? await User.find({ role: 'client', createdBy: { $in: managerIds } })
+                    .select('username email role createdAt isActive createdBy')
+                    .populate('createdBy', 'username email role')
+                    .lean()
+                : [];
+
+            const superadmins = currentAdmin?.createdBy ? [currentAdmin.createdBy] : [];
+
+            return res.status(200).json({
+                success: true,
+                data: {
+                    counts: {
+                        admins: 1,
+                        managers: managers.length,
+                        clients: clients.length,
+                        superadmins: superadmins.length
+                    },
+                    users: {
+                        admins: [currentAdmin],
+                        managers,
+                        clients,
+                        superadmins
+                    }
+                }
+            });
+        }
+
         const [adminsCount, managersCount, clientsCount, superAdminsCount] = await Promise.all([
             User.countDocuments({ role: 'admin' }),
             User.countDocuments({ role: 'manager' }),
@@ -1238,6 +1482,8 @@ module.exports = {
     forgetPassword,
     createMember,
     assignClientManager,
+    assignManagerAdmin,
+    assignAdminSuperAdmin,
     getTeamOverview,
     getAdminSummary
 };

@@ -34,6 +34,8 @@ const Admin = () => {
   const user = useMemo(() => safeParseJson(localStorage.getItem('user')), []);
   const role = (user?.role || '').toString();
   const canAccess = role === 'admin' || role === 'superadmin';
+  const canManageAdmins = role === 'superadmin';
+  const canManageManagers = role === 'superadmin';
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -41,6 +43,10 @@ const Admin = () => {
   const [clientManager, setClientManager] = useState<Record<string, string>>({});
   const [savingClientId, setSavingClientId] = useState<string>('');
   const [actionMessage, setActionMessage] = useState('');
+  const [adminSuperAdmin, setAdminSuperAdmin] = useState<Record<string, string>>({});
+  const [savingAdminId, setSavingAdminId] = useState<string>('');
+  const [managerAdmin, setManagerAdmin] = useState<Record<string, string>>({});
+  const [savingManagerId, setSavingManagerId] = useState<string>('');
 
   useEffect(() => {
     const load = async () => {
@@ -76,6 +82,28 @@ const Admin = () => {
   const clients: SummaryUser[] = data?.users?.clients || [];
   const superadmins: SummaryUser[] = data?.users?.superadmins || [];
 
+  const managerClientsCount = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const c of clients) {
+      const mid = (c?.createdBy?._id || '').toString();
+      if (!mid) continue;
+      map[mid] = (map[mid] || 0) + 1;
+    }
+    return map;
+  }, [clients]);
+
+  const managersByAdminId = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const m of managers) {
+      const aid = (m?.createdBy?._id || '').toString();
+      const mid = (m?._id || '').toString();
+      if (!aid || !mid) continue;
+      if (!map[aid]) map[aid] = [];
+      map[aid].push(mid);
+    }
+    return map;
+  }, [managers]);
+
   useEffect(() => {
     if (!clients.length) return;
     const next: Record<string, string> = {};
@@ -86,6 +114,28 @@ const Admin = () => {
     }
     setClientManager(next);
   }, [clients]);
+
+  useEffect(() => {
+    if (!admins.length) return;
+    const next: Record<string, string> = {};
+    for (const a of admins) {
+      const id = (a?._id || '').toString();
+      const sId = (a?.createdBy?._id || '').toString();
+      if (id) next[id] = sId;
+    }
+    setAdminSuperAdmin(next);
+  }, [admins]);
+
+  useEffect(() => {
+    if (!managers.length) return;
+    const next: Record<string, string> = {};
+    for (const m of managers) {
+      const id = (m?._id || '').toString();
+      const aId = (m?.createdBy?._id || '').toString();
+      if (id) next[id] = aId;
+    }
+    setManagerAdmin(next);
+  }, [managers]);
 
   const renderTable = (title: string, rows: SummaryUser[], showCreatedBy: boolean) => (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
@@ -121,6 +171,204 @@ const Admin = () => {
             {!rows.length ? (
               <tr className="border-t border-gray-100">
                 <td className="px-4 py-3 text-gray-500" colSpan={showCreatedBy ? 5 : 4}>
+                  No records
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderAdminsAssignment = () => (
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100">
+        <div className="text-sm font-semibold text-gray-900">Admins (Assign Super Admin)</div>
+        <div className="text-xs text-gray-500 mt-1">Total: {admins.length}</div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50 text-gray-600">
+            <tr>
+              <th className="text-left font-medium px-4 py-2">Name</th>
+              <th className="text-left font-medium px-4 py-2">Email</th>
+              <th className="text-left font-medium px-4 py-2">Managers</th>
+              <th className="text-left font-medium px-4 py-2">Clients</th>
+              <th className="text-left font-medium px-4 py-2">Super Admin</th>
+              <th className="text-left font-medium px-4 py-2">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {admins.map((a) => {
+              const adminId = (a?._id || '').toString();
+              const selected = adminId ? adminSuperAdmin[adminId] || '' : '';
+              const disabled = !adminId || savingAdminId === adminId;
+              const mids = adminId ? managersByAdminId[adminId] || [] : [];
+              const mCount = mids.length;
+              const cCount = mids.reduce((acc, mid) => acc + (managerClientsCount[mid] || 0), 0);
+              return (
+                <tr key={adminId || a.email} className="border-t border-gray-100">
+                  <td className="px-4 py-2 text-gray-900">{a.username}</td>
+                  <td className="px-4 py-2 text-gray-700">{a.email}</td>
+                  <td className="px-4 py-2 text-gray-700">{mCount}</td>
+                  <td className="px-4 py-2 text-gray-700">{cCount}</td>
+                  <td className="px-4 py-2 text-gray-700">
+                    <select
+                      className="w-full max-w-xs rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm"
+                      value={selected}
+                      onChange={(e) => {
+                        if (!adminId) return;
+                        setAdminSuperAdmin((prev) => ({ ...prev, [adminId]: e.target.value }));
+                      }}
+                      disabled={disabled}
+                    >
+                      <option value="">Select super admin</option>
+                      {superadmins.map((s) => (
+                        <option key={s._id || s.email} value={(s._id || '').toString()}>
+                          {(s.username || '').toString()} {(s.email ? `(${s.email})` : '')}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-2 text-gray-700">
+                    <button
+                      type="button"
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                      disabled={disabled || !selected}
+                      onClick={async () => {
+                        if (!adminId) return;
+                        setActionMessage('');
+                        setError('');
+                        setSavingAdminId(adminId);
+                        const result = await userService.assignAdminSuperAdmin(token, adminId, {
+                          superadminId: selected,
+                        });
+                        setSavingAdminId('');
+                        if (!result?.success) {
+                          setError(result?.message || 'Failed to update super admin');
+                          return;
+                        }
+                        setActionMessage('Admin super admin updated');
+
+                        setData((prev: any) => {
+                          const prevAdmins: SummaryUser[] = prev?.users?.admins || [];
+                          const updated = prevAdmins.map((x) =>
+                            String(x?._id || '') === adminId ? (result?.data as any) : x
+                          );
+                          return {
+                            ...(prev || {}),
+                            users: { ...(prev?.users || {}), admins: updated },
+                          };
+                        });
+                      }}
+                    >
+                      {savingAdminId === adminId ? 'Saving...' : 'Save'}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {!admins.length ? (
+              <tr className="border-t border-gray-100">
+                <td className="px-4 py-3 text-gray-500" colSpan={6}>
+                  No records
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderManagersAssignment = () => (
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100">
+        <div className="text-sm font-semibold text-gray-900">Managers (Assign Admin)</div>
+        <div className="text-xs text-gray-500 mt-1">Total: {managers.length}</div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50 text-gray-600">
+            <tr>
+              <th className="text-left font-medium px-4 py-2">Name</th>
+              <th className="text-left font-medium px-4 py-2">Email</th>
+              <th className="text-left font-medium px-4 py-2">Clients</th>
+              <th className="text-left font-medium px-4 py-2">Admin</th>
+              <th className="text-left font-medium px-4 py-2">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {managers.map((m) => {
+              const managerId = (m?._id || '').toString();
+              const selected = managerId ? managerAdmin[managerId] || '' : '';
+              const disabled = !managerId || savingManagerId === managerId;
+              const cCount = managerId ? managerClientsCount[managerId] || 0 : 0;
+              return (
+                <tr key={managerId || m.email} className="border-t border-gray-100">
+                  <td className="px-4 py-2 text-gray-900">{m.username}</td>
+                  <td className="px-4 py-2 text-gray-700">{m.email}</td>
+                  <td className="px-4 py-2 text-gray-700">{cCount}</td>
+                  <td className="px-4 py-2 text-gray-700">
+                    <select
+                      className="w-full max-w-xs rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm"
+                      value={selected}
+                      onChange={(e) => {
+                        if (!managerId) return;
+                        setManagerAdmin((prev) => ({ ...prev, [managerId]: e.target.value }));
+                      }}
+                      disabled={disabled}
+                    >
+                      <option value="">Select admin</option>
+                      {admins.map((a) => (
+                        <option key={a._id || a.email} value={(a._id || '').toString()}>
+                          {(a.username || '').toString()} {(a.email ? `(${a.email})` : '')}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-2 text-gray-700">
+                    <button
+                      type="button"
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                      disabled={disabled || !selected}
+                      onClick={async () => {
+                        if (!managerId) return;
+                        setActionMessage('');
+                        setError('');
+                        setSavingManagerId(managerId);
+                        const result = await userService.assignManagerAdmin(token, managerId, {
+                          adminId: selected,
+                        });
+                        setSavingManagerId('');
+                        if (!result?.success) {
+                          setError(result?.message || 'Failed to update admin');
+                          return;
+                        }
+                        setActionMessage('Manager admin updated');
+
+                        setData((prev: any) => {
+                          const prevManagers: SummaryUser[] = prev?.users?.managers || [];
+                          const updated = prevManagers.map((x) =>
+                            String(x?._id || '') === managerId ? (result?.data as any) : x
+                          );
+                          return {
+                            ...(prev || {}),
+                            users: { ...(prev?.users || {}), managers: updated },
+                          };
+                        });
+                      }}
+                    >
+                      {savingManagerId === managerId ? 'Saving...' : 'Save'}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {!managers.length ? (
+              <tr className="border-t border-gray-100">
+                <td className="px-4 py-3 text-gray-500" colSpan={5}>
                   No records
                 </td>
               </tr>
@@ -275,8 +523,8 @@ const Admin = () => {
                   </div>
                 </div>
 
-                {renderTable('Admins', admins, false)}
-                {renderTable('Managers', managers, false)}
+                {canManageAdmins ? renderAdminsAssignment() : renderTable('Admins', admins, false)}
+                {canManageManagers ? renderManagersAssignment() : renderTable('Managers', managers, false)}
                 {renderClients()}
                 {renderTable('Super Admins', superadmins, false)}
               </div>
