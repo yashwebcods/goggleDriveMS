@@ -29,6 +29,7 @@ const Dashboard = () => {
   const [uploadFile, setUploadFile] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -259,12 +260,31 @@ const Dashboard = () => {
         uploadsByParent.set(key, existing);
       }
 
+      const batches: Array<{ parentId?: string; files: File[] }> = [];
+      const batchSize = 20;
       for (const [parentKey, filesToUpload] of uploadsByParent.entries()) {
-        const res = await driveService.uploadFile(token, filesToUpload, parentKey || undefined);
-        if (!res?.success) {
-          throw new Error(res?.message || 'Failed to upload');
+        for (let i = 0; i < filesToUpload.length; i += batchSize) {
+          batches.push({
+            parentId: parentKey || undefined,
+            files: filesToUpload.slice(i, i + batchSize),
+          });
         }
       }
+
+      const maxConcurrentBatches = 2;
+      let nextBatch = 0;
+      const workerCount = Math.min(maxConcurrentBatches, batches.length || 0);
+      const workers = new Array(workerCount).fill(0).map(async () => {
+        while (true) {
+          const idx = nextBatch;
+          nextBatch += 1;
+          if (idx >= batches.length) break;
+          const batch = batches[idx];
+          const res = await driveService.uploadFile(token, batch.files, batch.parentId);
+          if (!res?.success) throw new Error(res?.message || 'Failed to upload');
+        }
+      });
+      await Promise.all(workers);
 
       setUploadFile([]);
       if (uploadInputRef.current) {
@@ -705,6 +725,15 @@ const Dashboard = () => {
                       (async () => {
                         if (!ensureAuth()) return;
                         const dropped = await getDroppedFiles(e.dataTransfer);
+                        if (!dropped.length) {
+                          const rawCount = Array.from(e.dataTransfer?.files || []).length;
+                          if (rawCount) {
+                            setError(
+                              "Folder drag-and-drop isn't supported in this browser. Use the Select Folder button instead."
+                            );
+                          }
+                          return;
+                        }
                         const folderFiles = dropped.filter((d) => d.relativePath.includes('/'));
                         const looseFiles = dropped.filter((d) => !d.relativePath.includes('/'));
 
@@ -736,12 +765,45 @@ const Dashboard = () => {
                       onChange={(e) => setUploadFile(Array.from(e.target.files || []))}
                       className="text-sm"
                     />
+                    <input
+                      type="file"
+                      ref={folderInputRef}
+                      onChange={async (e) => {
+                        const picked = Array.from(e.target.files || []) as any[];
+                        if (!picked.length) return;
+                        const dropped: DroppedFile[] = picked
+                          .map((f) => ({ file: f as File, relativePath: String(f?.webkitRelativePath || f?.name || '') }))
+                          .filter((d) => d.relativePath.includes('/'));
+                        if (!dropped.length) {
+                          setError('Failed to read selected folder. Please try again.');
+                          return;
+                        }
+                        try {
+                          await uploadDroppedFolderStructure(dropped);
+                        } catch (err: any) {
+                          setError(err?.message || 'Folder upload failed');
+                        } finally {
+                          if (folderInputRef.current) folderInputRef.current.value = '';
+                        }
+                      }}
+                      style={{ display: 'none' }}
+                      multiple
+                      {...({ webkitdirectory: 'true', directory: 'true' } as any)}
+                    />
                     <div className="text-xs text-gray-600">
                       {uploadFile.length ? `Selected: ${uploadFile.length} file(s)` : 'No file selected'}
                     </div>
                     {isUploadDragOver ? (
                       <div className="text-xs text-blue-700">Drop files or a folder here</div>
                     ) : null}
+                    <button
+                      type="button"
+                      onClick={() => folderInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Select Folder
+                    </button>
                     <button
                       type="button"
                       onClick={uploadAction}

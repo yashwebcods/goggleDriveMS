@@ -181,12 +181,32 @@ const FolderDetail = () => {
         uploadsByParent.set(key, existing);
       }
 
+      const batches: Array<{ parentId?: string; files: File[] }> = [];
+      const batchSize = 20;
       for (const [parentKey, filesToUpload] of uploadsByParent.entries()) {
-        const res = await driveService.uploadFile(token, filesToUpload, parentKey || undefined);
-        if (!res?.success) {
-          throw new Error(res?.message || 'Failed to upload');
+        for (let i = 0; i < filesToUpload.length; i += batchSize) {
+          batches.push({
+            parentId: parentKey || undefined,
+            files: filesToUpload.slice(i, i + batchSize),
+          });
         }
       }
+
+      const maxConcurrentBatches = 2;
+      let nextBatch = 0;
+      const workerCount = Math.min(maxConcurrentBatches, batches.length || 0);
+      const workers = new Array(workerCount).fill(0).map(async () => {
+        while (true) {
+          const idx = nextBatch;
+          nextBatch += 1;
+          if (idx >= batches.length) break;
+          const batch = batches[idx];
+          const res = await driveService.uploadFile(token, batch.files, batch.parentId);
+          if (!res?.success) throw new Error(res?.message || 'Failed to upload');
+        }
+      });
+
+      await Promise.all(workers);
 
       await loadItems();
     } catch (e: any) {

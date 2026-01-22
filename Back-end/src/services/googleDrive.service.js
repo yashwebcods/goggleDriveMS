@@ -359,9 +359,13 @@ const removePermission = async ({ userId, fileId, permissionId }) => {
 const uploadFile = async ({ userId, files, parentId }) => {
   const { drive } = await getDriveClientForUser(userId);
 
-  const items = [];
+  const inputFiles = Array.isArray(files) ? files : [];
+  const items = new Array(inputFiles.length);
 
-  for (const file of files || []) {
+  const maxConcurrent = Math.max(1, Number(process.env.DRIVE_UPLOAD_CONCURRENCY) || 3);
+  let nextIndex = 0;
+
+  const uploadOne = async (file) => {
     const requestBody = {
       name: file.originalname,
       appProperties: {
@@ -381,11 +385,21 @@ const uploadFile = async ({ userId, files, parentId }) => {
       media,
       fields: 'id, name, mimeType, parents, size',
     });
+    return data;
+  };
 
-    items.push(data);
-  }
+  const workerCount = Math.min(maxConcurrent, inputFiles.length || 0);
+  const workers = new Array(workerCount).fill(0).map(async () => {
+    while (true) {
+      const idx = nextIndex;
+      nextIndex += 1;
+      if (idx >= inputFiles.length) break;
+      items[idx] = await uploadOne(inputFiles[idx]);
+    }
+  });
 
-  return items;
+  await Promise.all(workers);
+  return items.filter(Boolean);
 };
 
 const getFileMeta = async ({ userId, fileId }) => {
