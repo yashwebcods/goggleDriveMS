@@ -14,7 +14,7 @@ const corsOptions = {
         if (!origin) return callback(null, true);
         if (allowedOrigins.includes(origin)) return callback(null, true);
         if (/^https:\/\/.*\.vercel\.app$/i.test(origin)) return callback(null, true);
-        return callback(new Error(`CORS blocked for origin: ${origin}`));
+        return callback(null, true);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
