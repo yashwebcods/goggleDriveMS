@@ -1,3 +1,6 @@
+import { toast } from '../utils/toast';
+import { getFriendlyRequestMessages } from '../utils/friendlyRequestMessage';
+
 export type ServiceResult<TData = any> = {
   success: boolean;
   status: number;
@@ -24,6 +27,8 @@ const request = async <TData = any>(
   options: RequestInit = {}
 ): Promise<ServiceResult<TData>> => {
   let res: Response;
+  const method = (options.method || 'GET').toString().toUpperCase();
+  const labels = getFriendlyRequestMessages(method, path);
 
   try {
     const mergedHeaders = new Headers(options.headers || undefined);
@@ -36,6 +41,7 @@ const request = async <TData = any>(
       headers: mergedHeaders,
     });
   } catch (err: any) {
+    toast.error(labels.error);
     return {
       success: false,
       status: 0,
@@ -52,6 +58,12 @@ const request = async <TData = any>(
   if (!res.ok) {
     const rawSnippet = raw ? raw.slice(0, 200) : '';
     const extraError = json?.error ? ` (${String(json.error).slice(0, 200)})` : '';
+    const errMsg =
+      (json?.message ? `${json.message}${extraError}` : undefined) ||
+      (rawSnippet
+        ? `Request failed (HTTP ${res.status}): ${rawSnippet}`
+        : `Request failed (HTTP ${res.status})`);
+    toast.error(json?.message || errMsg || labels.error);
     return {
       success: false,
       status: res.status,
@@ -66,6 +78,7 @@ const request = async <TData = any>(
   }
 
   if (json === null) {
+    toast.error(labels.error);
     return {
       success: false,
       status: res.status,
@@ -75,8 +88,15 @@ const request = async <TData = any>(
     };
   }
 
+  const successFlag = Boolean(json?.success ?? true);
+  if (!successFlag) {
+    toast.error(json?.message || labels.error);
+  } else if (method !== 'GET') {
+    toast.success(json?.message || labels.success);
+  }
+
   return {
-    success: Boolean(json?.success ?? true),
+    success: successFlag,
     status: res.status,
     message: json?.message,
     data: json?.data,

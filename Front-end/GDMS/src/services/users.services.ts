@@ -1,3 +1,6 @@
+import { toast } from '../utils/toast';
+import { getFriendlyRequestMessages } from '../utils/friendlyRequestMessage';
+
 export type ServiceResult<TData = any> = {
   success: boolean;
   status: number;
@@ -21,6 +24,8 @@ const safeParseJson = (text: string): any | null => {
 
 const request = async <TData = any>(path: string, options: RequestInit = {}): Promise<ServiceResult<TData>> => {
   let res: Response;
+  const method = (options.method || 'GET').toString().toUpperCase();
+  const labels = getFriendlyRequestMessages(method, path);
 
   try {
     res = await fetch(buildUrl(path), {
@@ -31,6 +36,7 @@ const request = async <TData = any>(path: string, options: RequestInit = {}): Pr
       ...options,
     });
   } catch (err: any) {
+    toast.error(labels.error);
     return {
       success: false,
       status: 0,
@@ -46,6 +52,12 @@ const request = async <TData = any>(path: string, options: RequestInit = {}): Pr
 
   if (!res.ok) {
     const rawSnippet = raw ? raw.slice(0, 200) : '';
+    const errMsg =
+      json?.message ||
+      (rawSnippet
+        ? `Request failed (HTTP ${res.status}): ${rawSnippet}`
+        : `Request failed (HTTP ${res.status})`);
+    toast.error(json?.message || errMsg || labels.error);
     return {
       success: false,
       status: res.status,
@@ -58,6 +70,7 @@ const request = async <TData = any>(path: string, options: RequestInit = {}): Pr
   }
 
   if (json === null) {
+    toast.error(labels.error);
     return {
       success: false,
       status: res.status,
@@ -67,8 +80,15 @@ const request = async <TData = any>(path: string, options: RequestInit = {}): Pr
     };
   }
 
+  const successFlag = Boolean(json?.success ?? true);
+  if (!successFlag) {
+    toast.error(json?.message || labels.error);
+  } else if (method !== 'GET') {
+    toast.success(json?.message || labels.success);
+  }
+
   return {
-    success: Boolean(json?.success ?? true),
+    success: successFlag,
     status: res.status,
     message: json?.message,
     data: json?.data,

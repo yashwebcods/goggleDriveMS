@@ -398,6 +398,7 @@ const filesList = async (req, res) => {
       parentId: parentId || undefined,
       pageSize: pageSize ? Number(pageSize) : 50,
       scope: scope || undefined,
+      gdmsOnly: gdmsOnlyFlag,
     });
 
     const files = Array.isArray(data?.files) ? data.files : [];

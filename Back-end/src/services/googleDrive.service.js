@@ -4,6 +4,10 @@ const User = require('../Models/user.model');
 const { Readable, PassThrough } = require('stream');
 const archiver = require('archiver');
 
+const GDMS_APP_PROPERTY_KEY = 'gdms';
+const GDMS_APP_PROPERTY_VALUE = 'true';
+const GDMS_APP_PROPERTY_QUERY = `appProperties has { key='${GDMS_APP_PROPERTY_KEY}', value='${GDMS_APP_PROPERTY_VALUE}' }`;
+
 const getOAuth2Client = () => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -40,7 +44,7 @@ const getDriveAuthUrlForUser = async (userId) => {
   const state = createState({ userId: String(userId) });
 
   const scopes = [
-    'https://www.googleapis.com/auth/drive',
+    'https://www.googleapis.com/auth/drive.file',
   ];
 
   const url = oauth2Client.generateAuthUrl({
@@ -136,10 +140,14 @@ const getDriveClientForUser = async (userId) => {
   return { drive, oauth2Client };
 };
 
-const listFiles = async ({ userId, parentId, pageSize = 50, scope }) => {
+const listFiles = async ({ userId, parentId, pageSize = 50, scope, gdmsOnly }) => {
   const { drive } = await getDriveClientForUser(userId);
 
   const qParts = [];
+  const gdmsOnlyFlag = Boolean(gdmsOnly);
+  if (gdmsOnlyFlag) {
+    qParts.push(GDMS_APP_PROPERTY_QUERY);
+  }
   if (parentId) {
     qParts.push(`'${parentId}' in parents`);
   } else if (scope === 'allFiles') {
@@ -168,7 +176,7 @@ const listFiles = async ({ userId, parentId, pageSize = 50, scope }) => {
       fields:
         'nextPageToken, files(id, name, mimeType, modifiedTime, size, parents, webViewLink, webContentLink, '
         + 'owners(emailAddress,displayName), lastModifyingUser(emailAddress,displayName), '
-        + 'shortcutDetails(targetId,targetMimeType))',
+        + 'shortcutDetails(targetId,targetMimeType), appProperties)',
       orderBy: scope === 'allFiles' ? 'modifiedTime desc' : 'folder,name',
     });
 
@@ -197,7 +205,7 @@ const createFolder = async ({ userId, name, parentId }) => {
   const { drive } = await getDriveClientForUser(userId);
 
   const parentKey = parentId || 'root';
-  const q = `name = '${escapeDriveQueryValue(name)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false and '${escapeDriveQueryValue(
+  const q = `${GDMS_APP_PROPERTY_QUERY} and name = '${escapeDriveQueryValue(name)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false and '${escapeDriveQueryValue(
     parentKey
   )}' in parents`;
 
@@ -218,6 +226,9 @@ const createFolder = async ({ userId, name, parentId }) => {
   const requestBody = {
     name,
     mimeType: 'application/vnd.google-apps.folder',
+    appProperties: {
+      [GDMS_APP_PROPERTY_KEY]: GDMS_APP_PROPERTY_VALUE,
+    },
   };
 
   if (parentId) requestBody.parents = [parentId];
@@ -336,6 +347,9 @@ const uploadFile = async ({ userId, files, parentId }) => {
   for (const file of files || []) {
     const requestBody = {
       name: file.originalname,
+      appProperties: {
+        [GDMS_APP_PROPERTY_KEY]: GDMS_APP_PROPERTY_VALUE,
+      },
     };
 
     if (parentId) requestBody.parents = [parentId];
