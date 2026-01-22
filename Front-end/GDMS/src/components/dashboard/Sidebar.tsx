@@ -23,6 +23,7 @@ const Sidebar = () => {
     roleNormalized === 'client';
   const canSeeAccessControl =
     roleNormalized === 'admin' || roleNormalized === 'superadmin' || roleNormalized === 'manager';
+  const canSeeAdmin = roleNormalized === 'admin' || roleNormalized === 'superadmin';
 
   return (
     <aside className="hidden md:flex md:w-58 md:shrink-0 bg-white border-r border-gray-200 h-full flex-col">
@@ -96,6 +97,18 @@ const Sidebar = () => {
               </svg>
             </div>
             Access Control
+          </Link>
+        ) : null}
+
+        {canSeeAdmin ? (
+          <Link to="/admin" className="px-3 py-2 text-gray-600 flex items-center gap-3 rounded-lg hover:bg-gray-50">
+            <div className="h-5 w-5 text-gray-500">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 3L4 7V12C4 16.4183 7.13401 20.449 11.5 21C15.866 20.449 19 16.4183 19 12V7L12 3Z" stroke="#9CA3AF" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M9 12L11 14L15 10" stroke="#9CA3AF" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            Admin
           </Link>
         ) : null}
       </nav>

@@ -483,6 +483,128 @@ const sendOtp = async (req, res) => {
     }
 }
 
+const assignClientManager = async (req, res) => {
+    try {
+        if (!req.user || !req.user.id) {
+            return res.status(401).json({
+                success: false,
+                message: 'Not authorized'
+            });
+        }
+
+        const requesterRole = (req.user.role || '').toString();
+        const allowed = ['admin', 'superadmin'].includes(requesterRole);
+        if (!allowed) {
+            return res.status(403).json({
+                success: false,
+                message: 'Not authorized'
+            });
+        }
+
+        const clientId = (req.params?.clientId || '').toString();
+        const { managerId, managerEmail } = req.body || {};
+
+        if (!clientId) {
+            return res.status(400).json({
+                success: false,
+                message: 'clientId is required'
+            });
+        }
+
+        if (!managerId && !managerEmail) {
+            return res.status(400).json({
+                success: false,
+                message: 'managerId or managerEmail is required'
+            });
+        }
+
+        const client = await User.findById(clientId).select('role createdBy isActive');
+        if (!client) {
+            return res.status(404).json({
+                success: false,
+                message: 'Client not found'
+            });
+        }
+
+        if ((client.role || '').toString() !== 'client') {
+            return res.status(400).json({
+                success: false,
+                message: 'Target user is not a client'
+            });
+        }
+
+        if (!client.isActive) {
+            return res.status(400).json({
+                success: false,
+                message: 'Client is not active'
+            });
+        }
+
+        const managerQuery = managerId
+            ? { _id: managerId }
+            : { email: managerEmail.toString().trim().toLowerCase() };
+
+        const manager = await User.findOne({
+            ...managerQuery,
+            role: 'manager',
+            isActive: true
+        }).select('_id createdBy email');
+
+        if (!manager) {
+            return res.status(404).json({
+                success: false,
+                message: 'Manager not found'
+            });
+        }
+
+        if (requesterRole === 'admin') {
+            if ((manager.createdBy || '').toString() !== req.user.id.toString()) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Admins can only assign clients to managers they created'
+                });
+            }
+
+            const currentManagerId = (client.createdBy || '').toString();
+            if (currentManagerId) {
+                const currentManager = await User.findById(currentManagerId)
+                    .select('_id createdBy role')
+                    .lean();
+                const currentManagerAdminId = (currentManager?.createdBy || '').toString();
+                const currentManagerRole = (currentManager?.role || '').toString();
+
+                if (currentManagerRole === 'manager' && currentManagerAdminId && currentManagerAdminId !== req.user.id.toString()) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'Admins can only reassign clients within their own managers'
+                    });
+                }
+            }
+        }
+
+        client.createdBy = manager._id;
+        await client.save();
+
+        const refreshed = await User.findById(clientId)
+            .select('username email role createdBy isActive createdAt')
+            .populate('createdBy', 'username email role')
+            .lean();
+
+        return res.status(200).json({
+            success: true,
+            message: 'Client manager updated successfully',
+            data: refreshed
+        });
+    } catch (error) {
+        console.error('assignClientManager error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Server Error',
+            error: error?.message
+        });
+    }
+};
+
 
 const verifyOtp = async (req, res) => {
     try {
@@ -1115,6 +1237,7 @@ module.exports = {
     verifyOtp,
     forgetPassword,
     createMember,
+    assignClientManager,
     getTeamOverview,
     getAdminSummary
 };

@@ -90,6 +90,32 @@ const getAutoShareEmailsForUploader = async (uploader) => {
   const emails = new Set();
   for (const e of await getCreatorChainEmails(uploader)) emails.add(e);
 
+  if (role === 'client') {
+    try {
+      const managerId = uploader?.createdBy || null;
+      if (managerId) {
+        const manager = await User.findById(managerId)
+          .select('email google.drive.accountEmail')
+          .lean();
+        const managerEmail =
+          (manager?.google?.drive?.accountEmail || manager?.email || '').toString().toLowerCase();
+        if (managerEmail) emails.add(managerEmail);
+      }
+    } catch (_) {
+    }
+
+    try {
+      const elevated = await User.find({ role: { $in: ['admin', 'superadmin'] }, isActive: true })
+        .select('email google.drive.accountEmail')
+        .lean();
+      for (const u of elevated || []) {
+        const email = (u?.google?.drive?.accountEmail || u?.email || '').toString().toLowerCase();
+        if (email) emails.add(email);
+      }
+    } catch (_) {
+    }
+  }
+
   if (role === 'manager') {
     const clients = await User.find({ createdBy: uploader?._id, role: { $regex: /^client$/i } })
       .select('email google.drive.accountEmail')
@@ -139,7 +165,7 @@ const autoShareDriveItem = async ({ uploaderUser, fileId }) => {
     }
   }
 
-  const shareRole = uploaderRole === 'manager' && isFolder ? 'writer' : 'reader';
+  const shareRole = uploaderRole === 'client' ? 'writer' : uploaderRole === 'manager' && isFolder ? 'writer' : 'reader';
 
   for (const email of recipients) {
     try {
@@ -155,6 +181,31 @@ const autoShareDriveItem = async ({ uploaderUser, fileId }) => {
       });
     } catch (_) {
     }
+  }
+
+  try {
+    const normalized = recipients.map((e) => String(e || '').toLowerCase()).filter(Boolean);
+    const users = normalized.length
+      ? await User.find({
+          $or: [
+            { email: { $in: normalized } },
+            { 'google.drive.accountEmail': { $in: normalized } },
+          ],
+        })
+          .select('_id')
+          .lean()
+      : [];
+    const ids = (users || []).map((u) => u?._id).filter(Boolean);
+
+    await DriveItemMeta.updateOne(
+      { fileId: String(fileId) },
+      {
+        $set: { autoSharedAt: new Date() },
+        ...(ids.length ? { $addToSet: { sharedWithUserIds: { $each: ids } } } : {}),
+      },
+      { upsert: true }
+    );
+  } catch (_) {
   }
 };
 

@@ -170,4 +170,16 @@ export const userService = {
       headers: { Authorization: `Bearer ${token}` },
     });
   },
+
+  assignClientManager: async (
+    token: string,
+    clientId: string,
+    payload: { managerId?: string; managerEmail?: string }
+  ) => {
+    return request(`/api/auth/clients/${encodeURIComponent(clientId)}/manager`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload || {}),
+    });
+  },
 };

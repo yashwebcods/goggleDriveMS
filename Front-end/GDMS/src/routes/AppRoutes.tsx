@@ -12,6 +12,7 @@ import Login from '../pages/Login';
 import OtpVerification from '../pages/OtpVerification';
 import PrivacyPolicy from '../pages/PrivacyPolicy';
 import Signup from '../pages/Signup';
+import Admin from '../pages/Admin';
 import Team from '../pages/Team';
 import TermsOfService from '../pages/TermsOfService';
 
@@ -95,7 +96,9 @@ const AppRoutes = () => {
         path="/admin"
         element={
           <RequireAuth>
-            <Navigate to="/team" replace />
+            <RequireRole allowedRoles={["admin", "superadmin"]}>
+              <Admin />
+            </RequireRole>
           </RequireAuth>
         }
       />

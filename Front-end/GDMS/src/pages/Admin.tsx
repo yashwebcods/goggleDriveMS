@@ -38,6 +38,9 @@ const Admin = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [data, setData] = useState<any>(null);
+  const [clientManager, setClientManager] = useState<Record<string, string>>({});
+  const [savingClientId, setSavingClientId] = useState<string>('');
+  const [actionMessage, setActionMessage] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -72,6 +75,17 @@ const Admin = () => {
   const managers: SummaryUser[] = data?.users?.managers || [];
   const clients: SummaryUser[] = data?.users?.clients || [];
   const superadmins: SummaryUser[] = data?.users?.superadmins || [];
+
+  useEffect(() => {
+    if (!clients.length) return;
+    const next: Record<string, string> = {};
+    for (const c of clients) {
+      const id = (c?._id || '').toString();
+      const mId = (c?.createdBy?._id || '').toString();
+      if (id) next[id] = mId;
+    }
+    setClientManager(next);
+  }, [clients]);
 
   const renderTable = (title: string, rows: SummaryUser[], showCreatedBy: boolean) => (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
@@ -117,6 +131,100 @@ const Admin = () => {
     </div>
   );
 
+  const renderClients = () => (
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100">
+        <div className="text-sm font-semibold text-gray-900">Clients</div>
+        <div className="text-xs text-gray-500 mt-1">Total: {clients.length}</div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50 text-gray-600">
+            <tr>
+              <th className="text-left font-medium px-4 py-2">Name</th>
+              <th className="text-left font-medium px-4 py-2">Email</th>
+              <th className="text-left font-medium px-4 py-2">Manager</th>
+              <th className="text-left font-medium px-4 py-2">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {clients.map((c) => {
+              const clientId = (c?._id || '').toString();
+              const selected = clientId ? clientManager[clientId] || '' : '';
+              const disabled = !clientId || savingClientId === clientId;
+              return (
+                <tr key={clientId || c.email} className="border-t border-gray-100">
+                  <td className="px-4 py-2 text-gray-900">{c.username}</td>
+                  <td className="px-4 py-2 text-gray-700">{c.email}</td>
+                  <td className="px-4 py-2 text-gray-700">
+                    <select
+                      className="w-full max-w-xs rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm"
+                      value={selected}
+                      onChange={(e) => {
+                        if (!clientId) return;
+                        setClientManager((prev) => ({ ...prev, [clientId]: e.target.value }));
+                      }}
+                      disabled={disabled}
+                    >
+                      <option value="">Select manager</option>
+                      {managers.map((m) => (
+                        <option key={m._id || m.email} value={(m._id || '').toString()}>
+                          {(m.username || '').toString()} {(m.email ? `(${m.email})` : '')}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-2 text-gray-700">
+                    <button
+                      type="button"
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                      disabled={disabled || !selected}
+                      onClick={async () => {
+                        if (!clientId) return;
+                        setActionMessage('');
+                        setError('');
+                        setSavingClientId(clientId);
+                        const result = await userService.assignClientManager(token, clientId, {
+                          managerId: selected,
+                        });
+                        setSavingClientId('');
+                        if (!result?.success) {
+                          setError(result?.message || 'Failed to update manager');
+                          return;
+                        }
+                        setActionMessage('Manager updated');
+
+                        setData((prev: any) => {
+                          const prevClients: SummaryUser[] = prev?.users?.clients || [];
+                          const updated = prevClients.map((x) =>
+                            String(x?._id || '') === clientId ? (result?.data as any) : x
+                          );
+                          return {
+                            ...(prev || {}),
+                            users: { ...(prev?.users || {}), clients: updated },
+                          };
+                        });
+                      }}
+                    >
+                      {savingClientId === clientId ? 'Saving...' : 'Save'}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {!clients.length ? (
+              <tr className="border-t border-gray-100">
+                <td className="px-4 py-3 text-gray-500" colSpan={4}>
+                  No records
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
   return (
     <div className="h-screen bg-[#F6F8FB] text-gray-900 flex flex-col overflow-hidden">
       <TopHeader
@@ -144,6 +252,7 @@ const Admin = () => {
 
             {isLoading ? <div className="text-sm text-gray-600">Loading...</div> : null}
             {error ? <div className="text-sm text-red-700">{error}</div> : null}
+            {actionMessage ? <div className="text-sm text-green-700">{actionMessage}</div> : null}
 
             {data ? (
               <div className="space-y-4">
@@ -168,7 +277,7 @@ const Admin = () => {
 
                 {renderTable('Admins', admins, false)}
                 {renderTable('Managers', managers, false)}
-                {renderTable('Clients', clients, true)}
+                {renderClients()}
                 {renderTable('Super Admins', superadmins, false)}
               </div>
             ) : null}
