@@ -232,6 +232,30 @@ const upsertDriveMeta = async ({ fileId, uploadedByEmail, uploadedByUserId }) =>
   );
 };
 
+const disconnect = async (req, res) => {
+  try {
+    await User.updateOne(
+      { _id: req.user._id },
+      {
+        $set: {
+          'google.drive.connected': false,
+          'google.drive.accessToken': null,
+          'google.drive.refreshToken': null,
+          'google.drive.expiryDate': null,
+          'google.drive.scope': null,
+          'google.drive.tokenType': null,
+          'google.drive.accountEmail': null,
+        },
+      }
+    );
+
+    return res.json({ success: true, data: { disconnected: true } });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({ success: false, message: error.message });
+  }
+};
+
 const getAuthUrl = async (req, res) => {
   try {
     const url = await getDriveAuthUrlForUser(req.user._id);
@@ -763,6 +787,7 @@ module.exports = {
   getAuthUrl,
   oauthCallback,
   status,
+  disconnect,
   filesList,
   folderCreate,
   fileUpload,

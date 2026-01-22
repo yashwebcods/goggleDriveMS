@@ -8,6 +8,14 @@ const GDMS_APP_PROPERTY_KEY = 'gdms';
 const GDMS_APP_PROPERTY_VALUE = 'true';
 const GDMS_APP_PROPERTY_QUERY = `appProperties has { key='${GDMS_APP_PROPERTY_KEY}', value='${GDMS_APP_PROPERTY_VALUE}' }`;
 
+const REQUIRED_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+
+const hasDriveFileScope = (scopeString) => {
+  const s = (scopeString || '').toString();
+  if (!s) return false;
+  return s.split(/\s+/g).includes(REQUIRED_DRIVE_SCOPE) || s.includes('drive.file');
+};
+
 const getOAuth2Client = () => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -107,6 +115,12 @@ const getDriveClientForUser = async (userId) => {
   if (!driveState?.connected || !driveState?.refreshToken) {
     const err = new Error('Google Drive is not connected');
     err.statusCode = 400;
+    throw err;
+  }
+
+  if (!hasDriveFileScope(driveState?.scope)) {
+    const err = new Error('Google Drive permissions are outdated. Please reconnect Google Drive.');
+    err.statusCode = 401;
     throw err;
   }
 
