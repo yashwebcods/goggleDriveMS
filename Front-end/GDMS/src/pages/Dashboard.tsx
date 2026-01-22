@@ -10,11 +10,13 @@ import PopupCard from '../components/PopupCard';
 import { getDroppedFiles, type DroppedFile } from '../utils/dragDropFolders';
 
 type ViewMode = 'list' | 'box';
+type DriveListMode = 'gdms' | 'shared';
 const Dashboard = () => {
   const [profile, setProfile] = useState<any>(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [driveConnected, setDriveConnected] = useState(false);
+  const [driveListMode, setDriveListMode] = useState<DriveListMode>('gdms');
   const [rootItems, setRootItems] = useState<FileRow[]>([]);
   const [items, setItems] = useState<FileRow[]>([]);
   const [toastOpen, setToastOpen] = useState(false);
@@ -365,10 +367,14 @@ const Dashboard = () => {
   const fetchDriveRows = async (
     parentId?: string,
     locationName?: string,
-    scope?: string
+    scope?: string,
+    modeOverride?: DriveListMode
   ): Promise<FileRow[] | null> => {
     if (!ensureAuth()) return null;
-    const result = await driveService.listFiles(token, parentId || undefined, 5000, scope, true);
+    const mode = modeOverride || driveListMode;
+    const gdmsOnlyFlag = mode === 'gdms';
+    const resolvedScope = mode === 'shared' && !parentId ? 'sharedWithMe' : scope;
+    const result = await driveService.listFiles(token, parentId || undefined, 5000, resolvedScope, gdmsOnlyFlag);
     if (!result?.success) {
       setError(result?.message || 'Failed to list Drive files');
       return null;
@@ -395,13 +401,20 @@ const Dashboard = () => {
     return rows;
   };
 
-  const loadDriveFiles = async () => {
-    const rootRows = await fetchDriveRows(undefined, 'My Drive');
+  const loadDriveFiles = async (modeOverride?: DriveListMode) => {
+    const mode = modeOverride || driveListMode;
+    const baseLocation = mode === 'shared' ? 'Shared with me' : 'My Drive';
+    const rootRows = await fetchDriveRows(undefined, baseLocation, undefined, mode);
     if (!rootRows) return;
     setRootItems(rootRows);
 
+    if (mode === 'shared') {
+      setItems(rootRows);
+      return;
+    }
+
     if (!activeParentId) {
-      const allFilesRows = await fetchDriveRows(undefined, 'My Drive', 'allFiles');
+      const allFilesRows = await fetchDriveRows(undefined, 'My Drive', 'allFiles', mode);
       if (allFilesRows) {
         setItems(allFilesRows.filter((r) => r.mimeType !== 'application/vnd.google-apps.folder'));
       } else {
@@ -410,7 +423,7 @@ const Dashboard = () => {
       return;
     }
 
-    const childRows = await fetchDriveRows(activeParentId, activeFolderName || 'Folder');
+    const childRows = await fetchDriveRows(activeParentId, activeFolderName || 'Folder', undefined, mode);
     if (!childRows) return;
     setItems(childRows.filter((r) => r.mimeType !== 'application/vnd.google-apps.folder'));
   };
@@ -616,12 +629,44 @@ const Dashboard = () => {
                   Disconnect Google Drive
                 </button>
               ) : null}
+              {driveConnected ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setDriveListMode('gdms');
+                      await loadDriveFiles('gdms');
+                    }}
+                    className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                      driveListMode === 'gdms'
+                        ? 'bg-gray-900 text-white'
+                        : 'bg-white text-gray-900 border border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    My GDMS Files
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setDriveListMode('shared');
+                      await loadDriveFiles('shared');
+                    }}
+                    className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                      driveListMode === 'shared'
+                        ? 'bg-gray-900 text-white'
+                        : 'bg-white text-gray-900 border border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    Shared with me
+                  </button>
+                </div>
+              ) : null}
               <div className="ml-auto text-xs text-gray-600">
                 Drive: {driveConnected ? 'Connected' : 'Not connected'}
               </div>
             </div>
 
-            {driveConnected ? (
+            {driveConnected && driveListMode === 'gdms' ? (
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="rounded-xl border border-gray-200 bg-white p-3">
                   <div className="text-xs font-semibold text-gray-600">Create Folder</div>
