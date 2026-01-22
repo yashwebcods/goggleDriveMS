@@ -35,13 +35,14 @@ const requestJson = async <TData = any>(
       body: options.body,
     });
   } catch (err: any) {
+    const rawMessage = String(err?.message || err);
     return {
       success: false,
       status: 0,
       message:
-        'Failed to reach API server. Check that your backend is running and that VITE_API_BASE_URL is correct.',
+        `Failed to reach API server. Check that your backend is running and that VITE_API_BASE_URL is correct. (${rawMessage})`,
       data: null as any,
-      raw: String(err?.message || err),
+      raw: rawMessage,
     };
   }
 
@@ -98,13 +99,14 @@ const requestForm = async <TData = any>(
       body: formData,
     });
   } catch (err: any) {
+    const rawMessage = String(err?.message || err);
     return {
       success: false,
       status: 0,
       message:
-        'Failed to reach API server. Check that your backend is running and that VITE_API_BASE_URL is correct.',
+        `Failed to reach API server. Check that your backend is running and that VITE_API_BASE_URL is correct. (${rawMessage})`,
       data: null as any,
-      raw: String(err?.message || err),
+      raw: rawMessage,
     };
   }
 
