@@ -14,8 +14,7 @@ const hasRequiredDriveScopes = (scopeString) => {
   const s = (scopeString || '').toString();
   if (!s) return false;
   const parts = s.split(/\s+/g);
-  const hasDrive = parts.includes(REQUIRED_DRIVE_SCOPE) || s.includes('drive');
-  return hasDrive;
+  return parts.includes(REQUIRED_DRIVE_SCOPE);
 };
 
 const isAppNotAuthorizedToFile = (err) => {
@@ -697,7 +696,7 @@ const getDriveStatus = async (userId) => {
   const user = await User.findById(userId).select('google');
   const driveState = user?.google?.drive;
   return {
-    connected: Boolean(driveState?.connected && driveState?.refreshToken),
+    connected: Boolean(driveState?.connected && driveState?.refreshToken && hasRequiredDriveScopes(driveState?.scope)),
   };
 };
 
