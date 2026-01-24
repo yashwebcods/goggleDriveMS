@@ -245,8 +245,8 @@ export const driveService = {
   },
 
   rename: (token: string, fileId: string, name: string) =>
-    requestJson<any>(`/api/drive/files/${encodeURIComponent(fileId)}`, {
-      method: 'PATCH',
+    requestJson<any>(`/api/drive/files/${encodeURIComponent(fileId)}/rename`, {
+      method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify({ name }),
     }),

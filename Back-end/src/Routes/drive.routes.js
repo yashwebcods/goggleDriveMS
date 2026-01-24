@@ -32,6 +32,7 @@ router.post('/upload', protect, upload.array('file', 20), fileUpload);
 router.get('/download/:fileId', protect, fileDownload);
 
 router.patch('/files/:fileId', protect, itemRename);
+router.post('/files/:fileId/rename', protect, itemRename);
 router.delete('/files/:fileId', protect, itemDelete);
 router.post('/files/:fileId/share', protect, itemShare);
 
