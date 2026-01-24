@@ -415,12 +415,13 @@ const status = async (req, res) => {
 
 const filesList = async (req, res) => {
   try {
-    const { parentId, pageSize, scope, gdmsOnly } = req.query;
+    const { parentId, pageSize, pageToken, scope, gdmsOnly } = req.query;
     const gdmsOnlyFlag = String(gdmsOnly || '').toLowerCase() === 'true';
     const data = await listFiles({
       userId: req.user._id,
       parentId: parentId || undefined,
       pageSize: pageSize ? Number(pageSize) : 50,
+      pageToken: pageToken ? String(pageToken) : undefined,
       scope: scope || undefined,
       gdmsOnly: gdmsOnlyFlag,
     });

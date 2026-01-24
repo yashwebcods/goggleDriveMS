@@ -11,6 +11,11 @@ import { getDroppedFiles, type DroppedFile } from '../utils/dragDropFolders';
 
 type ViewMode = 'list' | 'box';
 type DriveListMode = 'gdms' | 'shared';
+
+type DriveRowsPage = {
+  rows: FileRow[];
+  nextPageToken: string | null;
+};
 const Dashboard = () => {
   const [profile, setProfile] = useState<any>(null);
   const [error, setError] = useState('');
@@ -19,6 +24,18 @@ const Dashboard = () => {
   const [driveListMode, setDriveListMode] = useState<DriveListMode>('gdms');
   const [rootItems, setRootItems] = useState<FileRow[]>([]);
   const [items, setItems] = useState<FileRow[]>([]);
+  const [itemsNextPageToken, setItemsNextPageToken] = useState<string | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const itemsListParamsRef = useRef<
+    | {
+        parentId?: string;
+        locationName?: string;
+        scope?: string;
+        mode: DriveListMode;
+        excludeFolders: boolean;
+      }
+    | null
+  >(null);
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const toastTimerRef = useRef<number | null>(null);
@@ -147,22 +164,34 @@ const Dashboard = () => {
     if (!ensureAuth()) return false;
     if (!filesToUpload.length) return true;
 
-    const list = await driveService.listFiles(token, parentId || undefined, 5000, undefined, true);
-    if (!list?.success) {
-      setError(list?.message || 'Failed to check existing files');
-      return false;
+    const wanted = new Set(filesToUpload.map((f) => f.name));
+    let pageToken: string | undefined = undefined;
+    let conflict: any | null = null;
+
+    while (true) {
+      const list = await driveService.listFiles(token, parentId || undefined, 1000, undefined, true, pageToken);
+      if (!list?.success) {
+        setError(list?.message || 'Failed to check existing files');
+        return false;
+      }
+
+      const existingItems = (list?.data?.files || []) as any[];
+      for (const it of existingItems) {
+        if (!it?.name) continue;
+        if (it?.mimeType === 'application/vnd.google-apps.folder') continue;
+        if (wanted.has(String(it.name))) {
+          conflict = it;
+          break;
+        }
+      }
+
+      if (conflict) break;
+      const next = (list?.data?.nextPageToken || null) as string | null;
+      if (!next) break;
+      pageToken = String(next);
     }
 
-    const existingItems = (list?.data?.files || []) as any[];
-    const existingFileByName = new Map<string, any>();
-    for (const it of existingItems) {
-      if (!it?.name) continue;
-      if (it?.mimeType === 'application/vnd.google-apps.folder') continue;
-      existingFileByName.set(String(it.name), it);
-    }
-
-    const firstConflict = filesToUpload.find((f) => existingFileByName.has(f.name));
-    if (!firstConflict) {
+    if (!conflict) {
       const res = await driveService.uploadFile(token, filesToUpload, parentId);
       if (!res?.success) {
         setError(res?.message || 'Failed to upload file');
@@ -172,10 +201,9 @@ const Dashboard = () => {
       return true;
     }
 
-    const existing = existingFileByName.get(firstConflict.name);
-    setExistingFileId(String(existing?.id || ''));
-    setExistingFileName(String(existing?.name || firstConflict.name));
-    setRenameAndUploadFileValue(suggestRename(firstConflict.name));
+    setExistingFileId(String(conflict?.id || ''));
+    setExistingFileName(String(conflict?.name || filesToUpload[0]?.name || ''));
+    setRenameAndUploadFileValue(suggestRename(String(conflict?.name || filesToUpload[0]?.name || 'file')));
     setPendingUploadFiles(filesToUpload);
     setPendingUploadParentId(parentId);
     setFileExistsOpen(true);
@@ -388,13 +416,21 @@ const Dashboard = () => {
     parentId?: string,
     locationName?: string,
     scope?: string,
-    modeOverride?: DriveListMode
-  ): Promise<FileRow[] | null> => {
+    modeOverride?: DriveListMode,
+    pageToken?: string
+  ): Promise<DriveRowsPage | null> => {
     if (!ensureAuth()) return null;
     const mode = modeOverride || driveListMode;
     const gdmsOnlyFlag = mode === 'gdms';
     const resolvedScope = mode === 'shared' && !parentId ? 'sharedWithMe' : scope;
-    const result = await driveService.listFiles(token, parentId || undefined, 5000, resolvedScope, gdmsOnlyFlag);
+    const result = await driveService.listFiles(
+      token,
+      parentId || undefined,
+      200,
+      resolvedScope,
+      gdmsOnlyFlag,
+      pageToken
+    );
     if (!result?.success) {
       setError(result?.message || 'Failed to list Drive files');
       return null;
@@ -418,34 +454,99 @@ const Dashboard = () => {
       mimeType: f.mimeType,
     })) as any;
 
-    return rows;
+    const nextPageToken = (result?.data?.nextPageToken || null) as string | null;
+    return { rows, nextPageToken };
   };
 
   const loadDriveFiles = async (modeOverride?: DriveListMode) => {
+    setItemsNextPageToken(null);
+    itemsListParamsRef.current = null;
+
     const mode = modeOverride || driveListMode;
     const baseLocation = mode === 'shared' ? 'Shared with me' : 'My Drive';
-    const rootRows = await fetchDriveRows(undefined, baseLocation, undefined, mode);
-    if (!rootRows) return;
-    setRootItems(rootRows);
+    const rootRes = await fetchDriveRows(undefined, baseLocation, undefined, mode);
+    if (!rootRes) return;
+    setRootItems(rootRes.rows);
 
     if (mode === 'shared') {
-      setItems(rootRows);
+      setItems(rootRes.rows);
+      setItemsNextPageToken(rootRes.nextPageToken);
+      itemsListParamsRef.current = {
+        parentId: undefined,
+        locationName: baseLocation,
+        scope: undefined,
+        mode,
+        excludeFolders: false,
+      };
       return;
     }
 
     if (!activeParentId) {
-      const allFilesRows = await fetchDriveRows(undefined, 'My Drive', 'allFiles', mode);
-      if (allFilesRows) {
-        setItems(allFilesRows.filter((r) => r.mimeType !== 'application/vnd.google-apps.folder'));
+      const allFilesRes = await fetchDriveRows(undefined, 'My Drive', 'allFiles', mode);
+      if (allFilesRes) {
+        const filtered = allFilesRes.rows.filter((r) => r.mimeType !== 'application/vnd.google-apps.folder');
+        setItems(filtered);
+        setItemsNextPageToken(allFilesRes.nextPageToken);
+        itemsListParamsRef.current = {
+          parentId: undefined,
+          locationName: 'My Drive',
+          scope: 'allFiles',
+          mode,
+          excludeFolders: true,
+        };
       } else {
-        setItems(rootRows.filter((r) => r.mimeType !== 'application/vnd.google-apps.folder'));
+        const fallback = rootRes.rows.filter((r) => r.mimeType !== 'application/vnd.google-apps.folder');
+        setItems(fallback);
+        setItemsNextPageToken(rootRes.nextPageToken);
+        itemsListParamsRef.current = {
+          parentId: undefined,
+          locationName: baseLocation,
+          scope: undefined,
+          mode,
+          excludeFolders: true,
+        };
       }
       return;
     }
 
-    const childRows = await fetchDriveRows(activeParentId, activeFolderName || 'Folder', undefined, mode);
-    if (!childRows) return;
-    setItems(childRows.filter((r) => r.mimeType !== 'application/vnd.google-apps.folder'));
+    const childRes = await fetchDriveRows(activeParentId, activeFolderName || 'Folder', undefined, mode);
+    if (!childRes) return;
+    const filtered = childRes.rows.filter((r) => r.mimeType !== 'application/vnd.google-apps.folder');
+    setItems(filtered);
+    setItemsNextPageToken(childRes.nextPageToken);
+    itemsListParamsRef.current = {
+      parentId: activeParentId,
+      locationName: activeFolderName || 'Folder',
+      scope: undefined,
+      mode,
+      excludeFolders: true,
+    };
+  };
+
+  const loadMoreItems = async () => {
+    if (!ensureAuth()) return;
+    if (!itemsNextPageToken) return;
+    const params = itemsListParamsRef.current;
+    if (!params) return;
+
+    try {
+      setIsLoadingMore(true);
+      const res = await fetchDriveRows(
+        params.parentId,
+        params.locationName,
+        params.scope,
+        params.mode,
+        itemsNextPageToken
+      );
+      if (!res) return;
+      const nextRows = params.excludeFolders
+        ? res.rows.filter((r) => r.mimeType !== 'application/vnd.google-apps.folder')
+        : res.rows;
+      setItems((prev) => prev.concat(nextRows));
+      setItemsNextPageToken(res.nextPageToken);
+    } finally {
+      setIsLoadingMore(false);
+    }
   };
 
 
@@ -1509,6 +1610,9 @@ const Dashboard = () => {
                 navigate(`/folders/${item.id}`, { state: { folderName: item.name } });
               }
             }}
+            hasMore={Boolean(itemsNextPageToken)}
+            isLoadingMore={isLoadingMore}
+            onLoadMore={loadMoreItems}
             items={items.map((f: any) => ({
               ...f,
               name: f.id ? `${f.name}` : f.name,

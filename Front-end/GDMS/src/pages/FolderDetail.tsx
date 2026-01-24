@@ -36,6 +36,8 @@ const FolderDetail = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [items, setItems] = useState<FileRow[]>([]);
+  const [itemsNextPageToken, setItemsNextPageToken] = useState<string | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -228,8 +230,9 @@ const FolderDetail = () => {
 
     setIsLoading(true);
     setError('');
+    setItemsNextPageToken(null);
 
-    const result = await driveService.listFiles(token, folderId, 5000, undefined, true);
+    const result = await driveService.listFiles(token, folderId, 200, undefined, true);
     if (!result?.success) {
       if (result?.status === 401) {
         localStorage.removeItem('token');
@@ -261,7 +264,52 @@ const FolderDetail = () => {
     }));
 
     setItems(rows);
+    setItemsNextPageToken((result?.data?.nextPageToken || null) as string | null);
     setIsLoading(false);
+  };
+
+  const loadMoreItems = async () => {
+    if (!ensureAuth()) return;
+    if (!folderId) return;
+    if (!itemsNextPageToken) return;
+
+    try {
+      setIsLoadingMore(true);
+      const result = await driveService.listFiles(token, folderId, 200, undefined, true, itemsNextPageToken);
+      if (!result?.success) {
+        if (result?.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          navigate('/login', { replace: true });
+          return;
+        }
+        setError(result?.message || 'Failed to load more files');
+        return;
+      }
+
+      const apiFiles = (result?.data?.files || []) as any[];
+      const rows: FileRow[] = apiFiles.map((f) => ({
+        name: f.name || f.id,
+        type: mapMimeToType(f.mimeType),
+        location: folderName,
+        owner:
+          f?.uploadedByEmail ||
+          f?.createdBy?.emailAddress ||
+          (Array.isArray(f?.owners) ? f.owners[0]?.emailAddress : undefined) ||
+          f?.owner?.email ||
+          f?.ownerEmail ||
+          '—',
+        modified: toDisplayDate(f.modifiedTime),
+        selected: false,
+        id: f.id,
+        mimeType: f.mimeType,
+      }));
+
+      setItems((prev) => prev.concat(rows));
+      setItemsNextPageToken((result?.data?.nextPageToken || null) as string | null);
+    } finally {
+      setIsLoadingMore(false);
+    }
   };
 
   const uploadToThisFolder = async (filesToUpload: File[]) => {
@@ -269,26 +317,37 @@ const FolderDetail = () => {
     if (!folderId) return;
     if (!filesToUpload.length) return;
 
-    const list = await driveService.listFiles(token, folderId, 5000, undefined, true);
-    if (!list?.success) {
-      setError(list?.message || 'Failed to check existing files');
-      return;
+    const wanted = new Set(filesToUpload.map((f) => f.name));
+    let pageToken: string | undefined = undefined;
+    let conflict: any | null = null;
+
+    while (true) {
+      const list = await driveService.listFiles(token, folderId, 1000, undefined, true, pageToken);
+      if (!list?.success) {
+        setError(list?.message || 'Failed to check existing files');
+        return;
+      }
+
+      const existingItems = (list?.data?.files || []) as any[];
+      for (const it of existingItems) {
+        if (!it?.name) continue;
+        if (it?.mimeType === 'application/vnd.google-apps.folder') continue;
+        if (wanted.has(String(it.name))) {
+          conflict = it;
+          break;
+        }
+      }
+
+      if (conflict) break;
+      const next = (list?.data?.nextPageToken || null) as string | null;
+      if (!next) break;
+      pageToken = String(next);
     }
 
-    const existingItems = (list?.data?.files || []) as any[];
-    const existingFileByName = new Map<string, any>();
-    for (const it of existingItems) {
-      if (!it?.name) continue;
-      if (it?.mimeType === 'application/vnd.google-apps.folder') continue;
-      existingFileByName.set(String(it.name), it);
-    }
-
-    const firstConflict = filesToUpload.find((f) => existingFileByName.has(f.name));
-    if (firstConflict) {
-      const existing = existingFileByName.get(firstConflict.name);
-      setExistingFileId(String(existing?.id || ''));
-      setExistingFileName(String(existing?.name || firstConflict.name));
-      setRenameAndUploadFileValue(suggestRename(firstConflict.name));
+    if (conflict) {
+      setExistingFileId(String(conflict?.id || ''));
+      setExistingFileName(String(conflict?.name || filesToUpload[0]?.name || ''));
+      setRenameAndUploadFileValue(suggestRename(String(conflict?.name || filesToUpload[0]?.name || 'file')));
       setPendingUploadFiles(filesToUpload);
       setFileExistsOpen(true);
       return;
@@ -570,6 +629,19 @@ const FolderDetail = () => {
                         ) : null}
                       </div>
                     ))}
+
+                    {itemsNextPageToken ? (
+                      <div className="px-4 py-3 border-t border-gray-100 bg-white">
+                        <button
+                          type="button"
+                          disabled={Boolean(isLoadingMore)}
+                          onClick={() => loadMoreItems()}
+                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                        >
+                          {isLoadingMore ? 'Loading…' : 'Load more'}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="mt-3 text-sm text-gray-600">No files found.</div>

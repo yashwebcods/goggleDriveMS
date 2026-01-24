@@ -214,10 +214,18 @@ export const driveService = {
       headers: { Authorization: `Bearer ${token}` },
     }),
 
-  listFiles: (token: string, parentId?: string, pageSize?: number, scope?: string, gdmsOnly?: boolean) => {
+  listFiles: (
+    token: string,
+    parentId?: string,
+    pageSize?: number,
+    scope?: string,
+    gdmsOnly?: boolean,
+    pageToken?: string
+  ) => {
     const params = new URLSearchParams();
     if (parentId) params.set('parentId', parentId);
     if (pageSize) params.set('pageSize', String(pageSize));
+    if (pageToken) params.set('pageToken', pageToken);
     if (scope) params.set('scope', scope);
     if (gdmsOnly) params.set('gdmsOnly', 'true');
     const qs = params.toString() ? `?${params.toString()}` : '';

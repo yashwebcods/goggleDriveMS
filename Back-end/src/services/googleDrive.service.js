@@ -154,7 +154,7 @@ const getDriveClientForUser = async (userId) => {
   return { drive, oauth2Client };
 };
 
-const listFiles = async ({ userId, parentId, pageSize = 50, scope, gdmsOnly }) => {
+const listFiles = async ({ userId, parentId, pageSize = 50, pageToken, scope, gdmsOnly }) => {
   const { drive } = await getDriveClientForUser(userId);
 
   const qParts = [];
@@ -176,44 +176,32 @@ const listFiles = async ({ userId, parentId, pageSize = 50, scope, gdmsOnly }) =
   }
   qParts.push('trashed = false');
 
-  const totalLimit = Math.max(1, Number(pageSize) || 50);
-  const files = [];
-  let pageToken = undefined;
+  const perPage = Math.max(1, Math.min(1000, Number(pageSize) || 50));
+  const { data } = await drive.files.list({
+    pageSize: perPage,
+    pageToken: pageToken || undefined,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    spaces: 'drive',
+    q: qParts.join(' and '),
+    fields:
+      'nextPageToken, files(id, name, mimeType, modifiedTime, size, parents, webViewLink, webContentLink, '
+      + 'owners(emailAddress,displayName), lastModifyingUser(emailAddress,displayName), '
+      + 'shortcutDetails(targetId,targetMimeType), appProperties)',
+    orderBy: scope === 'allFiles' ? 'modifiedTime desc' : 'folder,name',
+  });
 
-  do {
-    const remaining = totalLimit - files.length;
-    if (remaining <= 0) break;
+  const files = (data.files || []).map((f) => {
+    const owner = Array.isArray(f?.owners) ? f.owners[0] : undefined;
+    const lastMod = f?.lastModifyingUser;
+    return {
+      ...f,
+      ownerEmail: owner?.emailAddress || lastMod?.emailAddress || null,
+      ownerName: owner?.displayName || lastMod?.displayName || null,
+    };
+  });
 
-    const perPage = Math.min(1000, remaining);
-    const { data } = await drive.files.list({
-      pageSize: perPage,
-      pageToken,
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      spaces: 'drive',
-      q: qParts.join(' and '),
-      fields:
-        'nextPageToken, files(id, name, mimeType, modifiedTime, size, parents, webViewLink, webContentLink, '
-        + 'owners(emailAddress,displayName), lastModifyingUser(emailAddress,displayName), '
-        + 'shortcutDetails(targetId,targetMimeType), appProperties)',
-      orderBy: scope === 'allFiles' ? 'modifiedTime desc' : 'folder,name',
-    });
-
-    const normalized = (data.files || []).map((f) => {
-      const owner = Array.isArray(f?.owners) ? f.owners[0] : undefined;
-      const lastMod = f?.lastModifyingUser;
-      return {
-        ...f,
-        ownerEmail: owner?.emailAddress || lastMod?.emailAddress || null,
-        ownerName: owner?.displayName || lastMod?.displayName || null,
-      };
-    });
-
-    files.push(...normalized);
-    pageToken = data.nextPageToken || undefined;
-  } while (pageToken);
-
-  return { files };
+  return { files, nextPageToken: data.nextPageToken || null };
 };
 
 const escapeDriveQueryValue = (value) => {
