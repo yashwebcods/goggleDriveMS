@@ -160,6 +160,55 @@ const Dashboard = () => {
     return new File([file], newName, { type: file.type, lastModified: file.lastModified });
   };
 
+  const buildExistingFileIdByName = async (parentId?: string) => {
+    const fileIdByName = new Map<string, string>();
+    let pageToken: string | undefined = undefined;
+
+    while (true) {
+      const list = await driveService.listFiles(token, parentId || undefined, 1000, undefined, true, pageToken);
+      if (!list?.success) {
+        throw new Error(list?.message || 'Failed to check existing files');
+      }
+      const existingItems = (list?.data?.files || []) as any[];
+      for (const it of existingItems) {
+        if (!it?.id || !it?.name) continue;
+        if (it?.mimeType === 'application/vnd.google-apps.folder') continue;
+        const name = String(it.name);
+        if (!fileIdByName.has(name)) fileIdByName.set(name, String(it.id));
+      }
+      const next = (list?.data?.nextPageToken || null) as string | null;
+      if (!next) break;
+      pageToken = String(next);
+    }
+
+    return fileIdByName;
+  };
+
+  const uploadFilesWithOverwriteByName = async (filesToUpload: File[], parentId?: string) => {
+    if (!filesToUpload.length) return;
+
+    const existingByName = await buildExistingFileIdByName(parentId);
+    const newFiles: File[] = [];
+
+    for (const f of filesToUpload) {
+      const existingId = existingByName.get(f.name);
+      if (existingId) {
+        const res = await driveService.overwriteFile(token, existingId, f);
+        if (!res?.success) throw new Error(res?.message || 'Failed to overwrite file');
+      } else {
+        newFiles.push(f);
+      }
+    }
+
+    if (newFiles.length) {
+      const batchSize = 20;
+      for (let i = 0; i < newFiles.length; i += batchSize) {
+        const res = await driveService.uploadFile(token, newFiles.slice(i, i + batchSize), parentId);
+        if (!res?.success) throw new Error(res?.message || 'Failed to upload');
+      }
+    }
+  };
+
   const uploadFilesWithDuplicateCheck = async (filesToUpload: File[], parentId?: string): Promise<boolean> => {
     if (!ensureAuth()) return false;
     if (!filesToUpload.length) return true;
@@ -299,20 +348,9 @@ const Dashboard = () => {
         }
       }
 
-      const maxConcurrentBatches = 2;
-      let nextBatch = 0;
-      const workerCount = Math.min(maxConcurrentBatches, batches.length || 0);
-      const workers = new Array(workerCount).fill(0).map(async () => {
-        while (true) {
-          const idx = nextBatch;
-          nextBatch += 1;
-          if (idx >= batches.length) break;
-          const batch = batches[idx];
-          const res = await driveService.uploadFile(token, batch.files, batch.parentId);
-          if (!res?.success) throw new Error(res?.message || 'Failed to upload');
-        }
-      });
-      await Promise.all(workers);
+      for (const batch of batches) {
+        await uploadFilesWithOverwriteByName(batch.files, batch.parentId);
+      }
 
       setUploadFile([]);
       if (uploadInputRef.current) {
@@ -341,12 +379,7 @@ const Dashboard = () => {
         setFolderUploadError('Not authorized');
         return;
       }
-      const result = await driveService.uploadFile(token, files, folderId);
-      if (!result?.success) {
-        setFolderUploadStatus('error');
-        setFolderUploadError(result?.message || 'Failed to upload file');
-        return;
-      }
+      await uploadFilesWithOverwriteByName(files, folderId);
       await loadDriveFiles();
       setFolderUploadStatus('success');
     } catch (e: any) {
@@ -1244,26 +1277,7 @@ const Dashboard = () => {
                       setIsUploading(true);
                       setError('');
 
-                      const delRes = await driveService.delete(token, existingId);
-                      if (!delRes?.success) {
-                        throw new Error(delRes?.message || 'Failed to delete existing folder');
-                      }
-
-                      let recreatedId = '';
-                      for (let attempt = 0; attempt < 5; attempt++) {
-                        const created = await driveService.createFolder(token, rootName, baseParentId);
-                        if (created?.success) {
-                          recreatedId = String(created.data?.id || '');
-                          break;
-                        }
-                        if (created?.status === 409) {
-                          await new Promise((r) => setTimeout(r, 500));
-                          continue;
-                        }
-                        throw new Error(created?.message || 'Failed to create folder');
-                      }
-
-                      if (!recreatedId) throw new Error('Failed to recreate folder');
+                      const rootId = String(existingId);
 
                       const uploadsByParent = new Map<string, File[]>();
 
@@ -1273,8 +1287,8 @@ const Dashboard = () => {
                         const withoutRoot = parts.slice(1);
                         const folderParts = withoutRoot.slice(0, Math.max(0, withoutRoot.length - 1));
                         const targetParent = folderParts.length
-                          ? await ensureFolderPath(folderParts, recreatedId)
-                          : recreatedId;
+                          ? await ensureFolderPath(folderParts, rootId)
+                          : rootId;
                         const key = targetParent || '';
                         const existing = uploadsByParent.get(key) || [];
                         existing.push(item.file);
@@ -1282,14 +1296,12 @@ const Dashboard = () => {
                       }
 
                       for (const [parentKey, filesToUpload] of uploadsByParent.entries()) {
-                        const res = await driveService.uploadFile(token, filesToUpload, parentKey || undefined);
-                        if (!res?.success) throw new Error(res?.message || 'Failed to upload');
+                        await uploadFilesWithOverwriteByName(filesToUpload, parentKey || undefined);
                       }
 
                       const looseFiles = looseItems.map((d) => d.file);
                       if (looseFiles.length) {
-                        const res = await driveService.uploadFile(token, looseFiles);
-                        if (!res?.success) throw new Error(res?.message || 'Failed to upload');
+                        await uploadFilesWithOverwriteByName(looseFiles, undefined);
                       }
 
                       await loadDriveFiles();
