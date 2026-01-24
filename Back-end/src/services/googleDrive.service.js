@@ -8,12 +8,16 @@ const GDMS_APP_PROPERTY_KEY = 'gdms';
 const GDMS_APP_PROPERTY_VALUE = 'true';
 const GDMS_APP_PROPERTY_QUERY = `appProperties has { key='${GDMS_APP_PROPERTY_KEY}' and value='${GDMS_APP_PROPERTY_VALUE}' }`;
 
-const REQUIRED_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const REQUIRED_DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const REQUIRED_DRIVE_METADATA_SCOPE = 'https://www.googleapis.com/auth/drive.metadata.readonly';
 
-const hasDriveFileScope = (scopeString) => {
+const hasRequiredDriveScopes = (scopeString) => {
   const s = (scopeString || '').toString();
   if (!s) return false;
-  return s.split(/\s+/g).includes(REQUIRED_DRIVE_SCOPE) || s.includes('drive.file');
+  const parts = s.split(/\s+/g);
+  const hasDriveFile = parts.includes(REQUIRED_DRIVE_FILE_SCOPE) || s.includes('drive.file');
+  const hasMetadata = parts.includes(REQUIRED_DRIVE_METADATA_SCOPE) || s.includes('drive.metadata.readonly');
+  return hasDriveFile && hasMetadata;
 };
 
 const getOAuth2Client = () => {
@@ -53,6 +57,7 @@ const getDriveAuthUrlForUser = async (userId) => {
 
   const scopes = [
     'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/drive.metadata.readonly',
   ];
 
   const url = oauth2Client.generateAuthUrl({
@@ -118,7 +123,7 @@ const getDriveClientForUser = async (userId) => {
     throw err;
   }
 
-  if (!hasDriveFileScope(driveState?.scope)) {
+  if (!hasRequiredDriveScopes(driveState?.scope)) {
     const err = new Error('Google Drive permissions are outdated. Please reconnect Google Drive.');
     err.statusCode = 401;
     throw err;

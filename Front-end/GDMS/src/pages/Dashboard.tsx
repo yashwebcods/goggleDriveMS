@@ -482,44 +482,28 @@ const Dashboard = () => {
     }
 
     if (!activeParentId) {
-      const allFilesRes = await fetchDriveRows(undefined, 'My Drive', 'allFiles', mode);
-      if (allFilesRes) {
-        const filtered = allFilesRes.rows.filter((r) => r.mimeType !== 'application/vnd.google-apps.folder');
-        setItems(filtered);
-        setItemsNextPageToken(allFilesRes.nextPageToken);
-        itemsListParamsRef.current = {
-          parentId: undefined,
-          locationName: 'My Drive',
-          scope: 'allFiles',
-          mode,
-          excludeFolders: true,
-        };
-      } else {
-        const fallback = rootRes.rows.filter((r) => r.mimeType !== 'application/vnd.google-apps.folder');
-        setItems(fallback);
-        setItemsNextPageToken(rootRes.nextPageToken);
-        itemsListParamsRef.current = {
-          parentId: undefined,
-          locationName: baseLocation,
-          scope: undefined,
-          mode,
-          excludeFolders: true,
-        };
-      }
+      setItems(rootRes.rows);
+      setItemsNextPageToken(rootRes.nextPageToken);
+      itemsListParamsRef.current = {
+        parentId: undefined,
+        locationName: baseLocation,
+        scope: undefined,
+        mode,
+        excludeFolders: false,
+      };
       return;
     }
 
     const childRes = await fetchDriveRows(activeParentId, activeFolderName || 'Folder', undefined, mode);
     if (!childRes) return;
-    const filtered = childRes.rows.filter((r) => r.mimeType !== 'application/vnd.google-apps.folder');
-    setItems(filtered);
+    setItems(childRes.rows);
     setItemsNextPageToken(childRes.nextPageToken);
     itemsListParamsRef.current = {
       parentId: activeParentId,
       locationName: activeFolderName || 'Folder',
       scope: undefined,
       mode,
-      excludeFolders: true,
+      excludeFolders: false,
     };
   };
 
