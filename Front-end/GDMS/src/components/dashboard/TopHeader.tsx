@@ -95,7 +95,7 @@ const TopHeader = ({ user, onLogout }: Props) => {
       </div>
 
       {isNavOpen ? (
-        <div className="absolute inset-0 z-40 md:hidden">
+        <div className="fixed inset-0 z-40 md:hidden">
           <button
             type="button"
             className="absolute inset-0 bg-black/30"
@@ -103,7 +103,7 @@ const TopHeader = ({ user, onLogout }: Props) => {
             aria-label="Close navigation"
           />
 
-          <div className="absolute left-0 top-0 h-full w-64 max-w-[80%] bg-white shadow-2xl border-r border-gray-200 p-4 flex flex-col">
+          <div className="absolute left-0 top-0 h-full w-64 max-w-[80%] bg-white shadow-2xl border-r border-gray-200 p-4 flex flex-col overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <div className="text-sm font-semibold text-gray-900">Menu</div>
               <button
@@ -174,7 +174,7 @@ const TopHeader = ({ user, onLogout }: Props) => {
       ) : null}
 
       {isProfileOpen ? (
-        <div className="absolute inset-0 z-50">
+        <div className="fixed inset-0 z-50">
           <button
             type="button"
             className="absolute inset-0 bg-black/30"
