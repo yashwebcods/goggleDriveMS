@@ -1047,15 +1047,12 @@ const FolderDetail = () => {
                     type="button"
                     onClick={async () => {
                       const existingId = dropExistingFolderId;
-                      const existingName = dropExistingFolderName;
                       const dropped = pendingDropFolderItems;
                       const looseItems = pendingDropLooseItems;
                       if (!existingId || !dropped.length) return;
                       setDropFolderExistsOpen(false);
                       setPendingDropFolderItems([]);
                       setPendingDropLooseItems([]);
-
-                      const rootName = existingName || String((dropped[0]?.relativePath || '').split('/').filter(Boolean)[0] || '');
 
                       const folderCache = new Map<string, string>();
                       const createOrReuseFolder = async (name: string, parentId?: string) => {
