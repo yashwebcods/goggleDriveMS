@@ -193,7 +193,12 @@ const listFiles = async ({ userId, parentId, pageSize = 50, pageToken, scope, gd
       'nextPageToken, files(id, name, mimeType, modifiedTime, size, parents, webViewLink, webContentLink, '
       + 'owners(emailAddress,displayName), lastModifyingUser(emailAddress,displayName), '
       + 'shortcutDetails(targetId,targetMimeType), appProperties)',
-    orderBy: scope === 'allFiles' ? 'modifiedTime desc' : 'folder,name',
+    orderBy:
+      scope === 'sharedWithMe'
+        ? 'sharedWithMeTime desc'
+        : scope === 'allFiles'
+          ? 'modifiedTime desc'
+          : 'folder,name',
   });
 
   const files = (data.files || []).map((f) => {
