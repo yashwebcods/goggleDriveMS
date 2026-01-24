@@ -26,9 +26,10 @@ const isAppNotAuthorizedToFile = (err) => {
   return reason === 'appNotAuthorizedToFile' || String(msg).includes('appNotAuthorizedToFile');
 };
 
-const makeAppNotAuthorizedError = (fileId) => {
+const makeAppNotAuthorizedError = (action, fileId) => {
+  const verb = (action || 'access').toString();
   const err = new Error(
-    `This file cannot be downloaded with the current Google Drive permission (drive.file). The user has not granted this app access to the file${fileId ? ` ${fileId}` : ''}.`
+    `This app is not authorized to ${verb} this item with the current Google Drive permission (drive.file). The user has not granted this app access to the file${fileId ? ` ${fileId}` : ''}.`
   );
   err.statusCode = 403;
   return err;
@@ -314,6 +315,10 @@ const shareFile = async ({ userId, fileId, email, role, sendNotificationEmail })
     const status = err?.code || err?.response?.status;
     const isAlreadyHasPermission = status === 409;
 
+    if (isAppNotAuthorizedToFile(err)) {
+      throw makeAppNotAuthorizedError('share', fileId);
+    }
+
     if (isAlreadyHasPermission && email) {
       try {
         const existing = await drive.permissions.list({
@@ -330,12 +335,19 @@ const shareFile = async ({ userId, fileId, email, role, sendNotificationEmail })
         const currentRole = (match?.role || '').toString();
         const shouldUpgrade = currentRole && currentRole !== resolvedRole;
         if (match?.id && shouldUpgrade) {
-          await drive.permissions.update({
-            fileId,
-            permissionId: match.id,
-            supportsAllDrives: true,
-            requestBody: { role: resolvedRole },
-          });
+          try {
+            await drive.permissions.update({
+              fileId,
+              permissionId: match.id,
+              supportsAllDrives: true,
+              requestBody: { role: resolvedRole },
+            });
+          } catch (e) {
+            if (isAppNotAuthorizedToFile(e)) {
+              throw makeAppNotAuthorizedError('share', fileId);
+            }
+            throw e;
+          }
         }
       } catch (_) {
       }
@@ -414,6 +426,42 @@ const uploadFile = async ({ userId, files, parentId }) => {
 
   await Promise.all(workers);
   return items.filter(Boolean);
+};
+
+const overwriteFileContent = async ({ userId, fileId, file }) => {
+  const { drive } = await getDriveClientForUser(userId);
+
+  if (!fileId) {
+    const err = new Error('fileId is required');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (!file) {
+    const err = new Error('file is required');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const media = {
+    mimeType: file.mimetype,
+    body: Readable.from(file.buffer),
+  };
+
+  try {
+    const { data } = await drive.files.update({
+      fileId,
+      media,
+      supportsAllDrives: true,
+      fields: 'id, name, mimeType, parents, size, modifiedTime',
+    });
+    return data;
+  } catch (err) {
+    if (isAppNotAuthorizedToFile(err)) {
+      throw makeAppNotAuthorizedError('overwrite', fileId);
+    }
+    throw err;
+  }
 };
 
 const getFileMeta = async ({ userId, fileId }) => {
@@ -498,7 +546,7 @@ const getDriveFileStreamForZip = async ({ drive, fileId, mimeType }) => {
       );
     } catch (err) {
       if (isAppNotAuthorizedToFile(err)) {
-        return { unauthorized: true, message: makeAppNotAuthorizedError(fileId).message };
+        return { unauthorized: true, message: makeAppNotAuthorizedError('download', fileId).message };
       }
       throw err;
     }
@@ -517,7 +565,7 @@ const getDriveFileStreamForZip = async ({ drive, fileId, mimeType }) => {
     );
   } catch (err) {
     if (isAppNotAuthorizedToFile(err)) {
-      return { unauthorized: true, message: makeAppNotAuthorizedError(fileId).message };
+      return { unauthorized: true, message: makeAppNotAuthorizedError('download', fileId).message };
     }
     throw err;
   }
@@ -614,7 +662,7 @@ const downloadFileStream = async ({ userId, fileId, mimeType }) => {
       );
     } catch (err) {
       if (isAppNotAuthorizedToFile(err)) {
-        throw makeAppNotAuthorizedError(fileId);
+        throw makeAppNotAuthorizedError('download', fileId);
       }
       throw err;
     }
@@ -635,7 +683,7 @@ const downloadFileStream = async ({ userId, fileId, mimeType }) => {
     );
   } catch (err) {
     if (isAppNotAuthorizedToFile(err)) {
-      throw makeAppNotAuthorizedError(fileId);
+      throw makeAppNotAuthorizedError('download', fileId);
     }
     throw err;
   }
@@ -662,6 +710,7 @@ module.exports = {
   listFiles,
   createFolder,
   uploadFile,
+  overwriteFileContent,
   renameFile,
   deleteFile,
   shareFile,

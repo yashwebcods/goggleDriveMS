@@ -1089,11 +1089,8 @@ const Dashboard = () => {
                       setIsUploading(true);
                       setError('');
 
-                      const delRes = await driveService.delete(token, existingId);
-                      if (!delRes?.success) throw new Error(delRes?.message || 'Failed to delete existing file');
-
-                      const upRes = await driveService.uploadFile(token, current, parentId);
-                      if (!upRes?.success) throw new Error(upRes?.message || 'Failed to upload file');
+                      const upRes = await driveService.overwriteFile(token, existingId, current);
+                      if (!upRes?.success) throw new Error(upRes?.message || 'Failed to overwrite file');
 
                       await loadDriveFiles();
                     } catch (e: any) {

@@ -11,6 +11,7 @@ const {
   filesList,
   folderCreate,
   fileUpload,
+  fileOverwrite,
   fileDownload,
   itemRename,
   itemDelete,
@@ -29,6 +30,7 @@ router.post('/disconnect', protect, disconnect);
 router.get('/files', protect, filesList);
 router.post('/folders', protect, folderCreate);
 router.post('/upload', protect, upload.array('file', 20), fileUpload);
+router.post('/files/:fileId/overwrite', protect, upload.single('file'), fileOverwrite);
 router.get('/download/:fileId', protect, fileDownload);
 
 router.patch('/files/:fileId', protect, itemRename);

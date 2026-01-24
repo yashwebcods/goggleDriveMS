@@ -252,6 +252,12 @@ export const driveService = {
     return requestForm<any>('/api/drive/upload', formData, { token });
   },
 
+  overwriteFile: (token: string, fileId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return requestForm<any>(`/api/drive/files/${encodeURIComponent(fileId)}/overwrite`, formData, { token });
+  },
+
   rename: (token: string, fileId: string, name: string) =>
     requestJson<any>(`/api/drive/files/${encodeURIComponent(fileId)}/rename`, {
       method: 'POST',

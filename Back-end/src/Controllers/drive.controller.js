@@ -4,6 +4,7 @@ const {
   listFiles,
   createFolder,
   uploadFile,
+  overwriteFileContent,
   renameFile,
   deleteFile,
   shareFile,
@@ -721,6 +722,38 @@ const fileUpload = async (req, res) => {
   }
 };
 
+const fileOverwrite = async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const file = req.file || null;
+    if (!file) {
+      return res.status(400).json({ success: false, message: 'file is required' });
+    }
+
+    await assertDriveItemAccess({ reqUser: req.user, fileId });
+
+    const data = await overwriteFileContent({
+      userId: req.user._id,
+      fileId,
+      file,
+    });
+
+    await upsertDriveMeta({
+      fileId: data?.id || fileId,
+      uploadedByEmail: req.user?.google?.drive?.accountEmail || req.user?.email,
+      uploadedByUserId: req.user?._id,
+    });
+
+    await autoShareDriveItem({ uploaderUser: req.user, fileId: data?.id || fileId });
+
+    return res.json({ success: true, data });
+  } catch (error) {
+    const statusCode = error.statusCode || error?.code || error?.response?.status || 500;
+    const apiMessage = error?.response?.data?.error?.message || error?.response?.data?.message;
+    return res.status(statusCode).json({ success: false, message: apiMessage || error.message });
+  }
+};
+
 const fileDownload = async (req, res) => {
   try {
     const { fileId } = req.params;
@@ -795,6 +828,7 @@ module.exports = {
   filesList,
   folderCreate,
   fileUpload,
+  fileOverwrite,
   fileDownload,
   itemRename,
   itemDelete,
