@@ -20,6 +20,20 @@ const hasRequiredDriveScopes = (scopeString) => {
   return hasDriveFile && hasMetadata;
 };
 
+const isAppNotAuthorizedToFile = (err) => {
+  const reason = err?.response?.data?.error?.errors?.[0]?.reason;
+  const msg = err?.response?.data?.error?.message || err?.message || '';
+  return reason === 'appNotAuthorizedToFile' || String(msg).includes('appNotAuthorizedToFile');
+};
+
+const makeAppNotAuthorizedError = (fileId) => {
+  const err = new Error(
+    `This file cannot be downloaded with the current Google Drive permission (drive.file). The user has not granted this app access to the file${fileId ? ` ${fileId}` : ''}.`
+  );
+  err.statusCode = 403;
+  return err;
+};
+
 const getOAuth2Client = () => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -476,10 +490,18 @@ const getDriveFileStreamForZip = async ({ drive, fileId, mimeType }) => {
       return null;
     }
 
-    const res = await drive.files.export(
-      { fileId, mimeType: exportFormat.mimeType },
-      { responseType: 'stream' }
-    );
+    let res;
+    try {
+      res = await drive.files.export(
+        { fileId, mimeType: exportFormat.mimeType },
+        { responseType: 'stream' }
+      );
+    } catch (err) {
+      if (isAppNotAuthorizedToFile(err)) {
+        return { unauthorized: true, message: makeAppNotAuthorizedError(fileId).message };
+      }
+      throw err;
+    }
     return {
       stream: res.data,
       mimeType: exportFormat.mimeType,
@@ -487,10 +509,18 @@ const getDriveFileStreamForZip = async ({ drive, fileId, mimeType }) => {
     };
   }
 
-  const res = await drive.files.get(
-    { fileId, alt: 'media' },
-    { responseType: 'stream' }
-  );
+  let res;
+  try {
+    res = await drive.files.get(
+      { fileId, alt: 'media' },
+      { responseType: 'stream' }
+    );
+  } catch (err) {
+    if (isAppNotAuthorizedToFile(err)) {
+      return { unauthorized: true, message: makeAppNotAuthorizedError(fileId).message };
+    }
+    throw err;
+  }
   return { stream: res.data, mimeType: mimeType || 'application/octet-stream', extension: '' };
 };
 
@@ -523,6 +553,14 @@ const downloadFolderZipStream = async ({ userId, folderId, folderName }) => {
         fileId: resolved.id,
         mimeType: resolved.mimeType,
       });
+
+      if (fileData?.unauthorized) {
+        archive.append(
+          Buffer.from(`${fileData.message}\n`),
+          { name: `${prefix}${entryName}.permission.txt` }
+        );
+        continue;
+      }
 
       if (!fileData) {
         archive.append(
@@ -568,10 +606,18 @@ const downloadFileStream = async ({ userId, fileId, mimeType }) => {
       throw err;
     }
 
-    const res = await drive.files.export(
-      { fileId, mimeType: exportFormat.mimeType },
-      { responseType: 'stream' }
-    );
+    let res;
+    try {
+      res = await drive.files.export(
+        { fileId, mimeType: exportFormat.mimeType },
+        { responseType: 'stream' }
+      );
+    } catch (err) {
+      if (isAppNotAuthorizedToFile(err)) {
+        throw makeAppNotAuthorizedError(fileId);
+      }
+      throw err;
+    }
 
     return {
       stream: res.data,
@@ -581,10 +627,18 @@ const downloadFileStream = async ({ userId, fileId, mimeType }) => {
     };
   }
 
-  const res = await drive.files.get(
-    { fileId, alt: 'media' },
-    { responseType: 'stream' }
-  );
+  let res;
+  try {
+    res = await drive.files.get(
+      { fileId, alt: 'media' },
+      { responseType: 'stream' }
+    );
+  } catch (err) {
+    if (isAppNotAuthorizedToFile(err)) {
+      throw makeAppNotAuthorizedError(fileId);
+    }
+    throw err;
+  }
 
   return {
     stream: res.data,

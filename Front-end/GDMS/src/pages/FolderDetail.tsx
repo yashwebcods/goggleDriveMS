@@ -9,6 +9,7 @@ import { getDroppedFiles, type DroppedFile } from '../utils/dragDropFolders';
 
 type LocationState = {
   folderName?: string;
+  fromShared?: boolean;
 };
 
 type DialogType = 'rename' | 'share' | 'delete';
@@ -32,6 +33,7 @@ const FolderDetail = () => {
 
   const state = (location.state || {}) as LocationState;
   const folderName = state.folderName || 'Folder';
+  const fromShared = Boolean(state.fromShared);
 
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -232,7 +234,7 @@ const FolderDetail = () => {
     setError('');
     setItemsNextPageToken(null);
 
-    const result = await driveService.listFiles(token, folderId, 200, undefined, true);
+    const result = await driveService.listFiles(token, folderId, 200, undefined, !fromShared);
     if (!result?.success) {
       if (result?.status === 401) {
         localStorage.removeItem('token');
@@ -275,7 +277,7 @@ const FolderDetail = () => {
 
     try {
       setIsLoadingMore(true);
-      const result = await driveService.listFiles(token, folderId, 200, undefined, true, itemsNextPageToken);
+      const result = await driveService.listFiles(token, folderId, 200, undefined, !fromShared, itemsNextPageToken);
       if (!result?.success) {
         if (result?.status === 401) {
           localStorage.removeItem('token');
@@ -322,7 +324,7 @@ const FolderDetail = () => {
     let conflict: any | null = null;
 
     while (true) {
-      const list = await driveService.listFiles(token, folderId, 1000, undefined, true, pageToken);
+      const list = await driveService.listFiles(token, folderId, 1000, undefined, !fromShared, pageToken);
       if (!list?.success) {
         setError(list?.message || 'Failed to check existing files');
         return;

@@ -1591,7 +1591,7 @@ const Dashboard = () => {
             onOpenItem={(item) => {
               if (!item?.id) return;
               if (item.mimeType === 'application/vnd.google-apps.folder') {
-                navigate(`/folders/${item.id}`, { state: { folderName: item.name } });
+                navigate(`/folders/${item.id}`, { state: { folderName: item.name, fromShared: driveListMode === 'shared' } });
               }
             }}
             hasMore={Boolean(itemsNextPageToken)}
