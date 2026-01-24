@@ -53,7 +53,6 @@ const getDriveAuthUrlForUser = async (userId) => {
 
   const scopes = [
     'https://www.googleapis.com/auth/drive.file',
-    'https://www.googleapis.com/auth/drive.readonly',
   ];
 
   const url = oauth2Client.generateAuthUrl({
@@ -162,6 +161,9 @@ const listFiles = async ({ userId, parentId, pageSize = 50, scope, gdmsOnly }) =
   const gdmsOnlyFlag = Boolean(gdmsOnly);
   if (gdmsOnlyFlag) {
     qParts.push(GDMS_APP_PROPERTY_QUERY);
+    if (scope !== 'sharedWithMe') {
+      qParts.push("'me' in owners");
+    }
   }
   if (parentId) {
     qParts.push(`'${parentId}' in parents`);
@@ -170,7 +172,7 @@ const listFiles = async ({ userId, parentId, pageSize = 50, scope, gdmsOnly }) =
   } else if (scope === 'allFiles') {
     qParts.push("mimeType != 'application/vnd.google-apps.folder'");
   } else {
-    qParts.push("('root' in parents or sharedWithMe)");
+    qParts.push("'root' in parents");
   }
   qParts.push('trashed = false');
 
