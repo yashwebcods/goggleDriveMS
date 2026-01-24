@@ -18,6 +18,7 @@ type DriveItem = {
   id: string;
   name?: string;
   mimeType?: string;
+  source?: 'gdms' | 'shared';
 };
 
 type DrivePermission = {
@@ -77,20 +78,55 @@ const FileAccessControl = () => {
 
   const loadDriveItems = async () => {
     if (!ensureAuth()) return;
-    const result = await driveService.listFiles(token, undefined, 5000, undefined, true);
-    if (!result?.success) {
-      if (result?.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        navigate('/login', { replace: true });
+    const fetchAll = async (opts: { scope?: string; gdmsOnly?: boolean; max: number }) => {
+      const all: DriveItem[] = [];
+      let pageToken: string | undefined = undefined;
+      while (true) {
+        const res = await driveService.listFiles(token, undefined, 1000, opts.scope, opts.gdmsOnly, pageToken);
+        if (!res?.success) return { ok: false as const, res };
+        const batch = (((res?.data as any)?.files || []) as DriveItem[]) || [];
+        all.push(...batch);
+        if (all.length >= opts.max) return { ok: true as const, files: all.slice(0, opts.max) };
+        const next = ((res?.data as any)?.nextPageToken || null) as string | null;
+        if (!next) break;
+        pageToken = String(next);
+      }
+      return { ok: true as const, files: all };
+    };
+
+    const gdms = await fetchAll({ gdmsOnly: true, max: 5000 });
+    if (!gdms.ok) {
+      if ((gdms as any)?.res?.status === 401) {
+        setError((gdms as any)?.res?.message || 'Google Drive permissions are outdated. Please reconnect Google Drive.');
         return;
       }
-      setError(result?.message || 'Failed to load Drive files');
+      setError((gdms as any)?.res?.message || 'Failed to load Drive files');
       return;
     }
 
-    const files = ((result?.data as any)?.files || []) as DriveItem[];
-    setDriveItems(files);
+    const shared = await fetchAll({ scope: 'sharedWithMe', gdmsOnly: false, max: 5000 });
+    if (!shared.ok) {
+      if ((shared as any)?.res?.status === 401) {
+        setError((shared as any)?.res?.message || 'Google Drive permissions are outdated. Please reconnect Google Drive.');
+        return;
+      }
+      setError((shared as any)?.res?.message || 'Failed to load shared files');
+      return;
+    }
+
+    const merged = new Map<string, DriveItem>();
+    for (const f of gdms.files) {
+      if (!f?.id) continue;
+      merged.set(String(f.id), { ...f, source: 'gdms' });
+    }
+    for (const f of shared.files) {
+      if (!f?.id) continue;
+      if (!merged.has(String(f.id))) {
+        merged.set(String(f.id), { ...f, source: 'shared' });
+      }
+    }
+
+    setDriveItems(Array.from(merged.values()));
   };
 
   const loadPermissions = async (fileId: string) => {
@@ -101,6 +137,10 @@ const FileAccessControl = () => {
       setIsRefreshingPermissions(true);
       const result = await driveService.listPermissions(token, fileId);
       if (!result?.success) {
+        if (result?.status === 401) {
+          setError(result?.message || 'Google Drive permissions are outdated. Please reconnect Google Drive.');
+          return;
+        }
         setError(result?.message || 'Failed to load permissions');
         return;
       }
@@ -129,6 +169,10 @@ const FileAccessControl = () => {
     setIsSharing(false);
 
     if (!result?.success) {
+      if (result?.status === 401) {
+        setError(result?.message || 'Google Drive permissions are outdated. Please reconnect Google Drive.');
+        return;
+      }
       setError(result?.message || 'Failed to share');
       return;
     }
@@ -146,6 +190,10 @@ const FileAccessControl = () => {
 
     const result = await driveService.removePermission(token, selectedFileId, permissionId);
     if (!result?.success) {
+      if (result?.status === 401) {
+        setError(result?.message || 'Google Drive permissions are outdated. Please reconnect Google Drive.');
+        return;
+      }
       setError(result?.message || 'Failed to unshare');
       return;
     }
@@ -247,7 +295,9 @@ const FileAccessControl = () => {
                     <option value="">-- Select --</option>
                     {driveItems.map((f) => (
                       <option key={f.id} value={f.id}>
-                        {(f.name || f.id) + (f.mimeType === 'application/vnd.google-apps.folder' ? ' (folder)' : '')}
+                        {(f.name || f.id)
+                          + (f.mimeType === 'application/vnd.google-apps.folder' ? ' (folder)' : '')
+                          + (f.source === 'shared' ? ' (shared)' : '')}
                       </option>
                     ))}
                   </select>
