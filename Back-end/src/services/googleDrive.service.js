@@ -8,16 +8,14 @@ const GDMS_APP_PROPERTY_KEY = 'gdms';
 const GDMS_APP_PROPERTY_VALUE = 'true';
 const GDMS_APP_PROPERTY_QUERY = `appProperties has { key='${GDMS_APP_PROPERTY_KEY}' and value='${GDMS_APP_PROPERTY_VALUE}' }`;
 
-const REQUIRED_DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-const REQUIRED_DRIVE_METADATA_SCOPE = 'https://www.googleapis.com/auth/drive.metadata.readonly';
+const REQUIRED_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
 const hasRequiredDriveScopes = (scopeString) => {
   const s = (scopeString || '').toString();
   if (!s) return false;
   const parts = s.split(/\s+/g);
-  const hasDriveFile = parts.includes(REQUIRED_DRIVE_FILE_SCOPE) || s.includes('drive.file');
-  const hasMetadata = parts.includes(REQUIRED_DRIVE_METADATA_SCOPE) || s.includes('drive.metadata.readonly');
-  return hasDriveFile && hasMetadata;
+  const hasDrive = parts.includes(REQUIRED_DRIVE_SCOPE) || s.includes('drive');
+  return hasDrive;
 };
 
 const isAppNotAuthorizedToFile = (err) => {
@@ -29,7 +27,7 @@ const isAppNotAuthorizedToFile = (err) => {
 const makeAppNotAuthorizedError = (action, fileId) => {
   const verb = (action || 'access').toString();
   const err = new Error(
-    `This app is not authorized to ${verb} this item with the current Google Drive permission (drive.file). The user has not granted this app access to the file${fileId ? ` ${fileId}` : ''}.`
+    `This app is not authorized to ${verb} this item with the current Google Drive permissions. The user has not granted this app access to the file${fileId ? ` ${fileId}` : ''}. Please reconnect Google Drive.`
   );
   err.statusCode = 403;
   return err;
@@ -71,8 +69,7 @@ const getDriveAuthUrlForUser = async (userId) => {
   const state = createState({ userId: String(userId) });
 
   const scopes = [
-    'https://www.googleapis.com/auth/drive.file',
-    'https://www.googleapis.com/auth/drive.metadata.readonly',
+    'https://www.googleapis.com/auth/drive',
   ];
 
   const url = oauth2Client.generateAuthUrl({

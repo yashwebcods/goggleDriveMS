@@ -165,7 +165,7 @@ const Dashboard = () => {
     let pageToken: string | undefined = undefined;
 
     while (true) {
-      const list = await driveService.listFiles(token, parentId || undefined, 1000, undefined, true, pageToken);
+      const list = await driveService.listFiles(token, parentId || undefined, 1000, undefined, false, pageToken);
       if (!list?.success) {
         throw new Error(list?.message || 'Failed to check existing files');
       }
